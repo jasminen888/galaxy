@@ -1,0 +1,2358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GENESIS — Interactive 3D Galaxy</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #00000a;
+      overflow: hidden;
+      cursor: none;
+      font-family: 'Courier New', monospace;
+      user-select: none;
+    }
+
+    canvas { position: fixed; inset: 0; display: block; }
+
+    #c-glow {
+      opacity: 0.50;
+      filter: blur(5px);
+      pointer-events: none;
+    }
+    #c-ui { pointer-events: none; }
+
+    /* ── Title ───────────────────────────────────────────────── */
+    .hud-title {
+      position: fixed;
+      top: 26px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      pointer-events: none;
+      z-index: 20;
+      white-space: nowrap;
+    }
+    .hud-title h1 {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: 10px;
+      color: rgba(120, 220, 255, 0.80);
+      text-transform: uppercase;
+      text-shadow: 0 0 18px rgba(0, 220, 255, 0.55);
+    }
+    .hud-title p {
+      margin-top: 5px;
+      font-size: 9px;
+      letter-spacing: 4px;
+      color: rgba(100, 200, 255, 0.25);
+      text-transform: uppercase;
+    }
+
+    /* ── Bottom hint ─────────────────────────────────────────── */
+    .hud-hint {
+      position: fixed;
+      bottom: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: rgba(100, 210, 255, 0.20);
+      text-transform: uppercase;
+      pointer-events: none;
+      z-index: 20;
+      white-space: nowrap;
+    }
+
+    /* ── Stats ───────────────────────────────────────────────── */
+    #stats {
+      position: fixed;
+      top: 22px;
+      right: 24px;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: rgba(0, 220, 255, 0.30);
+      pointer-events: none;
+      z-index: 20;
+      text-align: right;
+      line-height: 2;
+    }
+
+    /* ── Custom cursor ───────────────────────────────────────── */
+    #cursor {
+      position: fixed;
+      pointer-events: none;
+      z-index: 100;
+      width: 18px; height: 18px;
+      transform: translate(-50%, -50%);
+    }
+    #cursor::before, #cursor::after {
+      content: '';
+      position: absolute;
+      background: rgba(0, 220, 255, 0.7);
+    }
+    #cursor::before { width: 1px; height: 100%; left: calc(50% - 0.5px); }
+    #cursor::after  { height: 1px; width: 100%; top: calc(50% - 0.5px); }
+
+    /* ── Corner brackets ─────────────────────────────────────── */
+    .corner {
+      position: fixed;
+      width: 24px; height: 24px;
+      pointer-events: none;
+      z-index: 20;
+      opacity: 0.28;
+    }
+    .corner::before, .corner::after {
+      content: ''; position: absolute;
+      background: rgba(0, 200, 255, 0.8);
+    }
+    .corner.tl { top: 16px; left: 16px; }
+    .corner.tr { top: 16px; right: 16px; }
+    .corner.bl { bottom: 16px; left: 16px; }
+    .corner.br { bottom: 16px; right: 16px; }
+    .corner.tl::before,.corner.tr::before,
+    .corner.bl::before,.corner.br::before { width:100%;height:1px;top:0; }
+    .corner.tl::after,.corner.tr::after,
+    .corner.bl::after,.corner.br::after  { height:100%;width:1px; }
+    .corner.tl::after { left:0; }
+    .corner.tr::after { right:0; }
+    .corner.bl::before { bottom:0;top:auto; }
+    .corner.bl::after  { left:0; }
+    .corner.br::before { bottom:0;top:auto; }
+    .corner.br::after  { right:0; }
+
+    /* ── Controls panel — top-left, always visible ───────────── */
+    #intro {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 50;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1px;
+      background: rgba(0, 230, 255, 0.10);   /* grid-line color */
+      border: 1px solid rgba(0, 220, 255, 0.28);
+      border-radius: 10px;
+      overflow: hidden;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 0 28px rgba(0, 180, 255, 0.18), inset 0 0 0 1px rgba(255,255,255,0.05);
+      width: 220px;
+      opacity: 1;
+    }
+    #intro.hidden { opacity: 0; pointer-events: none; }
+
+    .ctrl-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      padding: 11px 6px;
+      background: rgba(0, 5, 20, 0.88);
+    }
+    .ctrl-icon { font-size: 17px; line-height: 1; }
+    .ctrl-key {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #00f0ff;
+      text-transform: uppercase;
+      text-align: center;
+      white-space: nowrap;
+      text-shadow: 0 0 8px rgba(0, 230, 255, 0.7);
+    }
+    .ctrl-label {
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #f0c040;
+      text-transform: uppercase;
+      text-align: center;
+      white-space: nowrap;
+      text-shadow: 0 0 6px rgba(240, 180, 20, 0.55);
+    }
+
+    /* ── Persistent mini legend (bottom-left, shows on hover) ── */
+    #legend {
+      display: none;
+    }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 5px;
+    }
+    .legend-icon { font-size: 12px; width: 18px; text-align: center; }
+    .legend-text {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: rgba(100, 210, 255, 0.38);
+      text-transform: uppercase;
+    }
+
+    /* ── Credit ──────────────────────────────────────────────── */
+    #credit {
+      position: fixed;
+      bottom: 14px;
+      right: 20px;
+      z-index: 30;
+      pointer-events: none;
+      text-align: right;
+      line-height: 1.6;
+    }
+    #credit span {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: rgba(180, 230, 255, 0.50);
+    }
+    #credit strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      background: linear-gradient(90deg, #00e5ff, #a855f7, #ff6fdb);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 8px rgba(0,230,255,0.45));
+    }
+
+    /* ── Supernova flash overlay ─────────────────────────────── */
+    #flash {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+      background: radial-gradient(ellipse at center,
+        rgba(255,230,160,0.45) 0%, transparent 70%);
+      transition: opacity 0.08s ease;
+    }
+
+    /* ── Vignette ────────────────────────────────────────────── */
+    #vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+      background: radial-gradient(ellipse at center,
+        transparent 48%, rgba(0,0,8,0.62) 100%);
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="c-bg"></canvas>
+  <canvas id="c-main"></canvas>
+  <canvas id="c-glow"></canvas>
+  <canvas id="c-ui"></canvas>
+
+  <div id="flash"></div>
+  <div id="vignette"></div>
+
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div class="hud-title">
+    <h1>GENESIS</h1>
+    <p>Interactive 3D Galaxy Simulation</p>
+  </div>
+
+  <div id="stats"></div>
+
+  <!-- Onboarding intro panel — auto-hides after 5 s, click to dismiss -->
+  <div id="intro">
+    <div class="ctrl-item">
+      <span class="ctrl-icon">🖱️</span>
+      <span class="ctrl-key">Drag</span>
+      <span class="ctrl-label">Rotate</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">🔍</span>
+      <span class="ctrl-key">Scroll wheel</span>
+      <span class="ctrl-label">Zoom in / out</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">🤌</span>
+      <span class="ctrl-key">Pinch</span>
+      <span class="ctrl-label">Zoom (mobile)</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">↩️</span>
+      <span class="ctrl-key">Dbl-click</span>
+      <span class="ctrl-label">Reset view</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">💥</span>
+      <span class="ctrl-key">S key</span>
+      <span class="ctrl-label">Supernova</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">⏸️</span>
+      <span class="ctrl-key">Space</span>
+      <span class="ctrl-label">Pause spin</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">🌀</span>
+      <span class="ctrl-key">H key</span>
+      <span class="ctrl-label">Hyperspace</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">⏱️</span>
+      <span class="ctrl-key">T hold</span>
+      <span class="ctrl-label">Slow time</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">⚡</span>
+      <span class="ctrl-key">Q key</span>
+      <span class="ctrl-label">Perf toggle</span>
+    </div>
+    <div class="ctrl-item">
+      <span class="ctrl-icon">🌌</span>
+      <span class="ctrl-key">Click 🌀</span>
+      <span class="ctrl-label">Wormhole</span>
+    </div>
+  </div>
+
+  <!-- Mini legend visible whenever the user hovers the page -->
+  <div id="legend">
+    <div class="legend-row"><span class="legend-icon">🖱️</span><span class="legend-text">Drag — rotate</span></div>
+    <div class="legend-row"><span class="legend-icon">🔍</span><span class="legend-text">Scroll — zoom</span></div>
+    <div class="legend-row"><span class="legend-icon">↩️</span><span class="legend-text">Dbl-click — reset</span></div>
+    <div class="legend-row"><span class="legend-icon">💥</span><span class="legend-text">S — supernova</span></div>
+  </div>
+
+  <div id="cursor"></div>
+
+  <!-- Credit -->
+  <div id="credit">
+    <span>Built &amp; designed by</span>
+    <strong>@Jasmine Nguyen</strong>
+  </div>
+
+<script>
+'use strict';
+/* =============================================================
+   GENESIS v2 — Masterpiece 3D Galaxy
+   · 7 200 particles in typed arrays (fast projection)
+   · Dual-canvas CSS bloom
+   · Nebula colour clouds
+   · Polar relativistic jets
+   · Gravitational lensing ring
+   · Star scintillation (400 twinkling stars)
+   · Supernova events with shockwave
+   · Rotating accretion disk
+   · Dust absorption lanes
+   · Shooting star comets
+   ============================================================= */
+
+// ── Canvases ──────────────────────────────────────────────────
+const cvBg   = document.getElementById('c-bg');
+const cvMain = document.getElementById('c-main');
+const cvGlow = document.getElementById('c-glow');
+const cvUI   = document.getElementById('c-ui');
+const flashEl = document.getElementById('flash');
+
+const bgCtx   = cvBg.getContext('2d');
+const mainCtx = cvMain.getContext('2d');
+const glowCtx = cvGlow.getContext('2d');
+const uiCtx   = cvUI.getContext('2d');
+
+const statsEl  = document.getElementById('stats');
+const cursorEl = document.getElementById('cursor');
+
+let W, H, CX, CY;
+
+// ── Galaxy parameters ─────────────────────────────────────────
+const N         = 7200;
+const ARMS      = 4;
+const R_GALAXY  = 320;
+const R_BULGE   = 68;
+const TWIST     = 2.9;
+const ARM_WIDTH = 0.30;
+const DISK_H    = 24;
+const FOV       = 900;
+
+// ── Particle storage (typed arrays = fast) ────────────────────
+const PX   = new Float32Array(N);
+const PY   = new Float32Array(N);
+const PZ   = new Float32Array(N);
+const PR   = new Float32Array(N);   // base radius
+const PRGB = new Uint8Array(N * 3);
+
+// ── Scintillation: 400 particles that twinkle ─────────────────
+const TWINKLE_N    = 400;
+const twinkleIdx   = new Int32Array(TWINKLE_N);
+const twinkleFreq  = new Float32Array(TWINKLE_N);
+const twinklePhase = new Float32Array(TWINKLE_N);
+
+// ── Supernovae list ───────────────────────────────────────────
+const supernovae = [];
+
+// ── Camera ────────────────────────────────────────────────────
+let rotX = 0.38, rotY = 0.0;
+let tRotX = 0.38, tRotY = 0.0;
+let zoom = 1.4,  tZoom = 1.4;
+let autoSpin = true;
+const SPIN_SPEED = 0.00025;
+
+// ── Input ─────────────────────────────────────────────────────
+let dragging = false, lastMX = 0, lastMY = 0;
+let idleTimer = null;
+
+// ── Shooting stars ────────────────────────────────────────────
+const shoots = [];
+
+// ── Time simulation ───────────────────────────────────────────
+let simTime = 0, timeScale = 1.0, timeDilationActive = false;
+
+// ── Hyperspace ────────────────────────────────────────────────
+let hyperspaceActive = false, hyperspaceLife = 0;
+const HYPERSPACE_MAX = 130;
+
+// ── Performance toggle ────────────────────────────────────────
+let renderEvery = 1;
+
+// ── Feature animation state ───────────────────────────────────
+let pulsarAngle = 0, wormAngle = 0, wormScreenPos = null, cometTimer = 0;
+let mouseDownX  = 0, mouseDownY = 0;
+
+// ── Parallax star field (screen-space, drifts with camera) ────
+const PARALLAX_N = 200;
+const PS_NX    = new Float32Array(PARALLAX_N);
+const PS_NY    = new Float32Array(PARALLAX_N);
+const PS_DEPTH = new Float32Array(PARALLAX_N);
+const PS_SIZE  = new Float32Array(PARALLAX_N);
+const PS_ALPHA = new Float32Array(PARALLAX_N);
+
+// ── Dwarf galaxy (slowly approaching) ────────────────────────
+const DWARF_N = 180;
+const DWX     = new Float32Array(DWARF_N);
+const DWY     = new Float32Array(DWARF_N);
+const DWZ     = new Float32Array(DWARF_N);
+const DWRGB   = new Uint8Array(DWARF_N * 3);
+let dwarfCX   = R_GALAXY * 3.8, dwarfCY = R_GALAXY * 1.0, dwarfCZ = R_GALAXY * 0.9;
+
+// ── Comet state ───────────────────────────────────────────────
+const comet = { active: false, x: 0, y: 0, vx: 0, vy: 0,
+                life: 0, maxLife: 0, size: 12, trail: [] };
+
+// ── 3D anchor positions (galaxy-space coords) ─────────────────
+const PULSAR   = { x:  R_GALAXY * 1.85, y:  20, z:  R_GALAXY * 0.4 };
+const WORMHOLE = { x:  R_GALAXY * 2.40, y: -15, z: -R_GALAXY * 0.6 };
+
+// ── Animated nebula cloud definitions ────────────────────────
+const NEBULA_CLOUDS = [
+  { ox:  0.33, oy: -0.20, r: 0.19, cr: 120, cg:  40, cb: 255, ph: 0.0 },
+  { ox: -0.28, oy:  0.17, r: 0.17, cr:   0, cg: 150, cb: 255, ph: 1.5 },
+  { ox:  0.13, oy:  0.30, r: 0.18, cr: 255, cg:  50, cb: 150, ph: 3.1 },
+  { ox: -0.20, oy: -0.28, r: 0.14, cr:   0, cg: 220, cb: 200, ph: 4.7 },
+];
+
+// ── Timing ────────────────────────────────────────────────────
+let fps = 60, lastTs = 0, frame = 0;
+let cosX = 1, sinX = 0, cosY = 1, sinY = 0;
+
+// =============================================================
+//  UTILITIES
+// =============================================================
+const rnd  = Math.random.bind(Math);
+const rnd2 = () => rnd() * 2 - 1;
+const TAU  = Math.PI * 2;
+
+// =============================================================
+//  GALAXY GENERATION
+// =============================================================
+function generateGalaxy() {
+  let i = 0;
+
+  // Central bulge — warm orange/yellow/white
+  const nBulge = Math.floor(N * 0.20);
+  for (; i < nBulge; i++) {
+    const r   = Math.pow(rnd(), 1.5) * R_BULGE;
+    const th  = rnd() * TAU;
+    const phi = Math.acos(rnd2());
+    PX[i] = r * Math.sin(phi) * Math.cos(th);
+    PY[i] = r * Math.sin(phi) * Math.sin(th) * 0.42;
+    PZ[i] = r * Math.cos(phi);
+    PR[i] = 0.7 + rnd() * 1.1;
+    const t = rnd();
+    PRGB[i*3]   = 232 + Math.floor(23 * t);
+    PRGB[i*3+1] = 125 + Math.floor(110 * (1-t));
+    PRGB[i*3+2] = 10  + Math.floor(100 * (1-t));
+  }
+
+  // Spiral arms — blue/white/cyan/pink
+  const nArms = Math.floor(N * 0.55);
+  for (let k = 0; k < nArms; k++, i++) {
+    const arm    = k % ARMS;
+    const offset = (arm / ARMS) * TAU;
+    const t      = Math.pow(rnd(), 0.6);
+    const r      = R_BULGE * 0.75 + t * (R_GALAXY - R_BULGE * 0.75);
+    const angle  = offset + TWIST * (r / R_GALAXY) + rnd2() * ARM_WIDTH * (1 + r / R_GALAXY);
+    const scatter = ARM_WIDTH * r * 0.20 * (1 - t * 0.35);
+
+    PX[i] = (r + rnd2() * scatter) * Math.cos(angle);
+    PZ[i] = (r + rnd2() * scatter) * Math.sin(angle);
+    PY[i] = rnd2() * DISK_H * (1 - t * 0.60);
+    PR[i] = 0.28 + rnd() * 1.15 * (1 - t * 0.40);
+
+    const st = rnd();
+    if (st < 0.35) {
+      // Hot blue-white
+      const b = 0.65 + rnd() * 0.35;
+      PRGB[i*3]   = Math.floor(130 + 120 * b);
+      PRGB[i*3+1] = Math.floor(160 + 90  * b);
+      PRGB[i*3+2] = 255;
+    } else if (st < 0.55) {
+      // Pure white
+      const w = 200 + Math.floor(rnd() * 55);
+      PRGB[i*3] = w; PRGB[i*3+1] = w; PRGB[i*3+2] = w;
+    } else if (st < 0.70) {
+      // Cyan nebula
+      PRGB[i*3]   = 20  + Math.floor(rnd() * 60);
+      PRGB[i*3+1] = 200 + Math.floor(rnd() * 55);
+      PRGB[i*3+2] = 255;
+    } else if (st < 0.84) {
+      // Hot magenta/pink star-forming region
+      PRGB[i*3]   = 220 + Math.floor(rnd() * 35);
+      PRGB[i*3+1] = 40  + Math.floor(rnd() * 80);
+      PRGB[i*3+2] = 180 + Math.floor(rnd() * 75);
+    } else {
+      // Deep violet
+      PRGB[i*3]   = 120 + Math.floor(rnd() * 80);
+      PRGB[i*3+1] = 40  + Math.floor(rnd() * 60);
+      PRGB[i*3+2] = 220 + Math.floor(rnd() * 35);
+    }
+  }
+
+  // Disk haze
+  const nDisk = Math.floor(N * 0.12);
+  for (let k = 0; k < nDisk; k++, i++) {
+    const r     = rnd() * R_GALAXY * 1.05;
+    const angle = rnd() * TAU;
+    PX[i] = r * Math.cos(angle);
+    PZ[i] = r * Math.sin(angle);
+    PY[i] = rnd2() * DISK_H * 1.8;
+    PR[i] = 0.15 + rnd() * 0.52;
+    const g = 80 + Math.floor(rnd() * 90);
+    PRGB[i*3] = g; PRGB[i*3+1] = g; PRGB[i*3+2] = Math.min(255, g + 65);
+  }
+
+  // Outer halo — old red/yellow stars
+  for (; i < N; i++) {
+    const r   = R_GALAXY + rnd() * R_GALAXY * 0.95;
+    const th  = rnd() * TAU;
+    const phi = Math.acos(rnd2());
+    PX[i] = r * Math.sin(phi) * Math.cos(th);
+    PY[i] = r * Math.sin(phi) * Math.sin(th) * 0.35;
+    PZ[i] = r * Math.cos(phi);
+    PR[i] = 0.15 + rnd() * 0.35;
+    const w = 100 + Math.floor(rnd() * 100);
+    PRGB[i*3] = Math.min(255, w + 25);
+    PRGB[i*3+1] = w;
+    PRGB[i*3+2] = Math.max(0, w - 30);
+  }
+
+  // Init scintillation
+  for (let k = 0; k < TWINKLE_N; k++) {
+    twinkleIdx[k]   = Math.floor(rnd() * N * 0.35);
+    twinkleFreq[k]  = 0.025 + rnd() * 0.055;
+    twinklePhase[k] = rnd() * TAU;
+  }
+}
+
+// =============================================================
+//  PARALLAX STAR FIELD
+// =============================================================
+function generateParallaxStars() {
+  for (let i = 0; i < PARALLAX_N; i++) {
+    PS_NX[i]    = rnd2();
+    PS_NY[i]    = rnd2();
+    PS_DEPTH[i] = 0.03 + rnd() * 0.12;
+    PS_SIZE[i]  = 0.6 + rnd() * 1.8;
+    PS_ALPHA[i] = 0.12 + rnd() * 0.38;
+  }
+}
+
+// =============================================================
+//  DWARF GALAXY GENERATION
+// =============================================================
+function generateDwarfGalaxy() {
+  const dr = 62;
+  for (let i = 0; i < DWARF_N; i++) {
+    const r   = Math.pow(rnd(), 1.4) * dr;
+    const th  = rnd() * TAU;
+    const phi = Math.acos(rnd2());
+    DWX[i] = r * Math.sin(phi) * Math.cos(th);
+    DWY[i] = r * Math.sin(phi) * Math.sin(th) * 0.38;
+    DWZ[i] = r * Math.cos(phi);
+    const w = 148 + Math.floor(rnd() * 92);
+    DWRGB[i*3]   = Math.min(255, w + 45);
+    DWRGB[i*3+1] = w;
+    DWRGB[i*3+2] = Math.max(0, w - 52);
+  }
+}
+
+// =============================================================
+//  BACKGROUND — nebula clouds + dust lanes + deep stars
+// =============================================================
+function drawBackground() {
+  bgCtx.fillStyle = '#00000a';
+  bgCtx.fillRect(0, 0, W, H);
+
+  // Deep-space nebula wash
+  const deepNeb = bgCtx.createRadialGradient(CX, CY, 0, CX, CY, Math.max(W, H) * 0.75);
+  deepNeb.addColorStop(0,   'rgba(18, 0, 45, 0.30)');
+  deepNeb.addColorStop(0.45,'rgba(0, 8, 35, 0.15)');
+  deepNeb.addColorStop(1,   'transparent');
+  bgCtx.fillStyle = deepNeb;
+  bgCtx.fillRect(0, 0, W, H);
+
+  // ── Colourful nebula clouds along arm directions ──────────────
+  const nebulaRegions = [
+    { ox: 0.22, oy: -0.14, r: 0.38, c: 'rgba(100,30,200,0.13)' },  // purple NW
+    { ox:-0.25, oy:  0.12, r: 0.35, c: 'rgba(0,100,220,0.11)' },   // blue SW
+    { ox: 0.18, oy:  0.20, r: 0.32, c: 'rgba(0,190,220,0.09)' },   // cyan SE
+    { ox:-0.18, oy: -0.18, r: 0.33, c: 'rgba(200,30,120,0.09)' },  // magenta NE
+    { ox: 0.00, oy:  0.00, r: 0.22, c: 'rgba(255,140,40,0.07)' },  // warm core
+    { ox: 0.30, oy:  0.10, r: 0.28, c: 'rgba(80,0,160,0.08)' },    // violet E
+  ];
+  const S = Math.min(W, H);
+  nebulaRegions.forEach(n => {
+    const nx = CX + n.ox * S;
+    const ny = CY + n.oy * S;
+    const nr = n.r * S;
+    const g  = bgCtx.createRadialGradient(nx, ny, 0, nx, ny, nr);
+    g.addColorStop(0,   n.c);
+    g.addColorStop(0.5, n.c.replace(/[\d.]+\)$/, '0.04)'));
+    g.addColorStop(1,   'transparent');
+    bgCtx.fillStyle = g;
+    bgCtx.fillRect(0, 0, W, H);
+  });
+
+  // ── Dust lanes (dark curved absorption bands) ─────────────────
+  bgCtx.save();
+  bgCtx.globalAlpha = 0.55;
+  for (let d = 0; d < 3; d++) {
+    const baseAngle = (d / 3) * TAU + 0.4;
+    const rx = CX + Math.cos(baseAngle) * S * 0.06;
+    const ry = CY + Math.sin(baseAngle) * S * 0.06;
+    const ex = CX + Math.cos(baseAngle + TWIST) * S * 0.30;
+    const ey = CY + Math.sin(baseAngle + TWIST) * S * 0.30;
+    bgCtx.beginPath();
+    bgCtx.moveTo(rx, ry);
+    bgCtx.quadraticCurveTo(
+      CX + rnd2() * S * 0.08, CY + rnd2() * S * 0.08,
+      ex, ey
+    );
+    bgCtx.lineWidth  = 18 + rnd() * 28;
+    bgCtx.strokeStyle = 'rgba(0,0,8,0.45)';
+    bgCtx.stroke();
+  }
+  bgCtx.restore();
+
+  // ── Distant background galaxies ───────────────────────────────
+  const bgGalDefs = [
+    { fx: 0.14, fy: 0.12, rot:  0.30, w: 42, h: 15, c: '200,180,255', a: 0.22 },
+    { fx: 0.78, fy: 0.66, rot: -0.72, w: 38, h: 11, c: '255,215,185', a: 0.18 },
+    { fx: 0.87, fy: 0.20, rot:  1.20, w: 30, h:  9, c: '180,215,255', a: 0.20 },
+    { fx: 0.22, fy: 0.76, rot:  0.85, w: 34, h: 10, c: '185,255,220', a: 0.17 },
+    { fx: 0.59, fy: 0.08, rot: -0.40, w: 25, h:  7, c: '255,200,195', a: 0.16 },
+  ];
+  bgGalDefs.forEach(g => {
+    const gx = g.fx * W, gy = g.fy * H;
+    bgCtx.save();
+    bgCtx.translate(gx, gy);
+    bgCtx.rotate(g.rot);
+    const oG = bgCtx.createRadialGradient(0, 0, 0, 0, 0, g.w * 2.2);
+    oG.addColorStop(0,   `rgba(${g.c},${(g.a * 0.45).toFixed(3)})`);
+    oG.addColorStop(0.5, `rgba(${g.c},${(g.a * 0.18).toFixed(3)})`);
+    oG.addColorStop(1,   'transparent');
+    bgCtx.fillStyle = oG;
+    bgCtx.beginPath();
+    bgCtx.ellipse(0, 0, g.w * 2.2, g.h * 2.2, 0, 0, TAU);
+    bgCtx.fill();
+    const cG = bgCtx.createRadialGradient(0, 0, 0, 0, 0, g.w);
+    cG.addColorStop(0,    `rgba(${g.c},${g.a.toFixed(3)})`);
+    cG.addColorStop(0.55, `rgba(${g.c},${(g.a * 0.4).toFixed(3)})`);
+    cG.addColorStop(1,    'transparent');
+    bgCtx.fillStyle = cG;
+    bgCtx.beginPath();
+    bgCtx.ellipse(0, 0, g.w, g.h, 0, 0, TAU);
+    bgCtx.fill();
+    bgCtx.restore();
+  });
+
+  // ── Distant background stars ──────────────────────────────────
+  for (let k = 0; k < 600; k++) {
+    const x = rnd() * W, y = rnd() * H;
+    const r = rnd() * 0.80;
+    const a = rnd() * 0.50 + 0.08;
+    bgCtx.beginPath();
+    bgCtx.arc(x, y, r, 0, TAU);
+    bgCtx.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`;
+    bgCtx.fill();
+  }
+}
+
+// =============================================================
+//  SHOOTING STARS
+// =============================================================
+function spawnShoot() {
+  // All white — slight warm/cool variance for realism
+  const warmth = rnd();  // 0 = cool white, 1 = warm white
+  const R = Math.floor(240 + warmth * 15);
+  const G = Math.floor(242 + warmth * 8);
+  const B = Math.floor(255 - warmth * 20);
+  // Realistic diagonal: always travelling roughly same direction (upper-left to lower-right)
+  const angle = 0.28 + rnd() * 0.22;  // ~16–26° below horizontal
+  const speed = 6 + rnd() * 8;
+  return {
+    x:       -80 + rnd() * (W + 80),   // spread across full width
+    y:       rnd() * H * 0.70,          // only upper 70% of screen
+    vx:      Math.cos(angle) * speed,
+    vy:      Math.sin(angle) * speed,
+    // Tail: short & tapered — realistic meteors have short ionisation trails
+    len:     55 + rnd() * 80,
+    // Width tapers: thicker at head, sharp vanishing tail handled in draw
+    width:   0.5 + rnd() * 0.8,
+    life:    0,
+    maxLife: 30 + Math.floor(rnd() * 40),
+    r: R, g: G, b: B,
+  };
+}
+
+function drawShoots() {
+  for (let k = shoots.length - 1; k >= 0; k--) {
+    const s = shoots[k];
+    s.life++;
+    const t = s.life / s.maxLife;
+    // Sharp bright flash on entry, slow fade on exit — like real meteors
+    const alpha = t < 0.08 ? t / 0.08 : Math.pow(1 - (t - 0.08) / 0.92, 1.8);
+    if (alpha > 0.005) {
+      const speed = Math.hypot(s.vx, s.vy);
+      const tf    = s.len / speed;
+      // Tail tip (behind the head)
+      const tx = s.x - s.vx * tf;
+      const ty = s.y - s.vy * tf;
+
+      uiCtx.save();
+
+      // ── Main tail — white gradient, wide at head, vanishing at tip ──
+      const grad = uiCtx.createLinearGradient(s.x, s.y, tx, ty);
+      grad.addColorStop(0,    `rgba(${s.r},${s.g},${s.b},${(alpha).toFixed(3)})`);
+      grad.addColorStop(0.18, `rgba(${s.r},${s.g},${s.b},${(alpha * 0.70).toFixed(3)})`);
+      grad.addColorStop(0.55, `rgba(${s.r},${s.g},${s.b},${(alpha * 0.20).toFixed(3)})`);
+      grad.addColorStop(1,    `rgba(${s.r},${s.g},${s.b},0)`);
+
+      uiCtx.lineWidth   = s.width;
+      uiCtx.strokeStyle = grad;
+      uiCtx.shadowBlur  = 6;
+      uiCtx.shadowColor = `rgba(${s.r},${s.g},${s.b},${(alpha * 0.5).toFixed(2)})`;
+      uiCtx.beginPath();
+      uiCtx.moveTo(s.x, s.y);
+      uiCtx.lineTo(tx, ty);
+      uiCtx.stroke();
+
+      // ── Bright ablation head — tiny white-hot dot ──
+      const headGlow = uiCtx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.width * 5);
+      headGlow.addColorStop(0,   `rgba(255,255,255,${(alpha * 0.95).toFixed(3)})`);
+      headGlow.addColorStop(0.4, `rgba(${s.r},${s.g},${s.b},${(alpha * 0.50).toFixed(3)})`);
+      headGlow.addColorStop(1,   'transparent');
+      uiCtx.fillStyle = headGlow;
+      uiCtx.shadowBlur  = 10;
+      uiCtx.shadowColor = `rgba(255,255,255,${(alpha * 0.6).toFixed(2)})`;
+      uiCtx.beginPath();
+      uiCtx.arc(s.x, s.y, s.width * 5, 0, TAU);
+      uiCtx.fill();
+
+      uiCtx.restore();
+    }
+    s.x += s.vx;
+    s.y += s.vy;
+    if (s.life >= s.maxLife || s.x > W + 100 || s.y > H + 100) shoots.splice(k, 1);
+  }
+  // Max 6 at once — sparse, like real meteor showers
+  if (shoots.length < 6 && rnd() < 0.012) shoots.push(spawnShoot());
+}
+
+// =============================================================
+//  PARALLAX BACKGROUND STARS
+// =============================================================
+function drawParallaxStars() {
+  const driftX = rotY * (W * 0.022);
+  const driftY = rotX * (H * 0.012);
+  mainCtx.globalCompositeOperation = 'screen';
+  for (let i = 0; i < PARALLAX_N; i++) {
+    const bx = (PS_NX[i] * 0.5 + 0.5) * W;
+    const by = (PS_NY[i] * 0.5 + 0.5) * H;
+    const sx = ((bx + driftX * PS_DEPTH[i]) % W + W) % W;
+    const sy = ((by + driftY * PS_DEPTH[i]) % H + H) % H;
+    mainCtx.beginPath();
+    mainCtx.arc(sx, sy, PS_SIZE[i], 0, TAU);
+    mainCtx.fillStyle = `rgba(255,255,255,${PS_ALPHA[i].toFixed(3)})`;
+    mainCtx.fill();
+  }
+}
+
+// =============================================================
+//  DWARF GALAXY (slowly approaching main galaxy)
+// =============================================================
+function drawDwarfGalaxy() {
+  const sf  = FOV * zoom;
+  const zOff = R_GALAXY * 1.55 + sf;
+  const dx = -dwarfCX, dy2 = -dwarfCY, dz = -dwarfCZ;
+  const dDist = Math.hypot(dx, dy2, dz);
+  if (dDist > 80) {
+    dwarfCX += (dx / dDist) * 0.05 * timeScale;
+    dwarfCY += (dy2 / dDist) * 0.018 * timeScale;
+    dwarfCZ += (dz / dDist) * 0.028 * timeScale;
+  }
+  mainCtx.globalCompositeOperation = 'screen';
+  for (let i = 0; i < DWARF_N; i++) {
+    const wx = DWX[i] + dwarfCX;
+    const wy = DWY[i] + dwarfCY;
+    const wz = DWZ[i] + dwarfCZ;
+    const y1 = wy * cosX - wz * sinX;
+    const z1 = wy * sinX + wz * cosX;
+    const x2 = wx * cosY + z1 * sinY;
+    const z2 = -wx * sinY + z1 * cosY;
+    const depth = sf / (zOff + z2);
+    if (depth < 0.01) continue;
+    const sx = CX + x2 * depth;
+    const sy = CY + y1 * depth;
+    if (sx < -10 || sx > W + 10 || sy < -10 || sy > H + 10) continue;
+    const alpha = Math.max(0.05, Math.min(0.65, depth * 0.75));
+    const size  = Math.max(0.2, 0.45 * depth * zoom);
+    const r = DWRGB[i*3], g = DWRGB[i*3+1], b = DWRGB[i*3+2];
+    mainCtx.beginPath();
+    mainCtx.arc(sx, sy, size, 0, TAU);
+    mainCtx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+    mainCtx.fill();
+  }
+}
+
+// =============================================================
+//  ANIMATED NEBULA CLOUDS
+// =============================================================
+function drawNebulaClouds() {
+  const S = Math.min(W, H);
+  NEBULA_CLOUDS.forEach(n => {
+    const drift  = Math.sin(simTime * 0.0004 + n.ph) * 0.024;
+    const driftY = Math.cos(simTime * 0.0003 + n.ph) * 0.016;
+    const nx     = CX + (n.ox + drift) * S;
+    const ny     = CY + (n.oy + driftY) * S;
+    const nr     = n.r * S * (1 + 0.06 * Math.sin(simTime * 0.0009 + n.ph));
+    const a      = 0.052 + 0.024 * Math.sin(simTime * 0.0012 + n.ph);
+    const g      = uiCtx.createRadialGradient(nx, ny, 0, nx, ny, nr);
+    g.addColorStop(0,   `rgba(${n.cr},${n.cg},${n.cb},${a.toFixed(3)})`);
+    g.addColorStop(0.42,`rgba(${n.cr},${n.cg},${n.cb},${(a * 0.48).toFixed(3)})`);
+    g.addColorStop(1,   'transparent');
+    uiCtx.fillStyle = g;
+    uiCtx.beginPath();
+    uiCtx.arc(nx, ny, nr, 0, TAU);
+    uiCtx.fill();
+  });
+}
+
+// =============================================================
+//  COMET (with dust tail + ion tail)
+// =============================================================
+function spawnComet() {
+  const ang    = rnd() * TAU;
+  const startR = Math.max(W, H) * 0.74;
+  const cx0    = CX + Math.cos(ang) * startR;
+  const cy0    = CY + Math.sin(ang) * startR;
+  const targetX = CX + rnd2() * 140;
+  const targetY = CY + rnd2() * 100;
+  const dist = Math.hypot(targetX - cx0, targetY - cy0);
+  const spd  = 1.6 + rnd() * 2.0;
+  comet.active  = true;
+  comet.x       = cx0;
+  comet.y       = cy0;
+  comet.vx      = ((targetX - cx0) / dist) * spd;
+  comet.vy      = ((targetY - cy0) / dist) * spd;
+  comet.life    = 0;
+  comet.maxLife = 380 + Math.floor(rnd() * 220);
+  comet.size    = 9 + rnd() * 9;
+  comet.trail   = [];
+}
+
+function drawComet() {
+  cometTimer++;
+  if (!comet.active) {
+    if (cometTimer > 2400) { cometTimer = 0; spawnComet(); }
+    return;
+  }
+  comet.life++;
+  const t = comet.life / comet.maxLife;
+  const alpha = t < 0.10 ? t / 0.10 : t > 0.82 ? (1 - t) / 0.18 : 1.0;
+
+  comet.trail.push({ x: comet.x, y: comet.y });
+  if (comet.trail.length > 90) comet.trail.shift();
+
+  uiCtx.save();
+  uiCtx.shadowBlur = 0;
+
+  // ── DUST TAIL — broad, golden, follows orbit path ─────────────
+  if (comet.trail.length > 2) {
+    for (let k = 1; k < comet.trail.length; k++) {
+      const ta   = k / comet.trail.length;
+      uiCtx.beginPath();
+      uiCtx.moveTo(comet.trail[k].x, comet.trail[k].y);
+      uiCtx.lineTo(comet.trail[k - 1].x, comet.trail[k - 1].y);
+      uiCtx.strokeStyle = `rgba(255,192,88,${(ta * alpha * 0.42).toFixed(3)})`;
+      uiCtx.lineWidth   = Math.max(0.5, ta * comet.size * 2.0);
+      uiCtx.stroke();
+    }
+  }
+
+  // ── ION TAIL — narrow, blue-white, away from galaxy centre ────
+  const awayX = comet.x - CX, awayY = comet.y - CY;
+  const awayD = Math.hypot(awayX, awayY) || 1;
+  const iDX = awayX / awayD, iDY = awayY / awayD;
+  const ionLen = 155 + comet.size * 9;
+  const ionG = uiCtx.createLinearGradient(
+    comet.x, comet.y,
+    comet.x + iDX * ionLen, comet.y + iDY * ionLen
+  );
+  ionG.addColorStop(0,    `rgba(160,218,255,${(alpha * 0.78).toFixed(3)})`);
+  ionG.addColorStop(0.38, `rgba(80,162,255,${(alpha * 0.40).toFixed(3)})`);
+  ionG.addColorStop(1,    'transparent');
+  uiCtx.beginPath();
+  uiCtx.moveTo(comet.x, comet.y);
+  uiCtx.lineTo(comet.x + iDX * ionLen, comet.y + iDY * ionLen);
+  uiCtx.lineWidth   = 3 + comet.size * 0.28;
+  uiCtx.strokeStyle = ionG;
+  uiCtx.shadowBlur  = 10;
+  uiCtx.shadowColor = 'rgba(80,180,255,0.55)';
+  uiCtx.stroke();
+
+  // ── COMA — fuzzy green-white glow ─────────────────────────────
+  uiCtx.shadowBlur = 0;
+  const comaR = comet.size * 4.5;
+  const comaG = uiCtx.createRadialGradient(comet.x, comet.y, 0, comet.x, comet.y, comaR);
+  comaG.addColorStop(0,    `rgba(210,255,235,${(alpha * 0.88).toFixed(3)})`);
+  comaG.addColorStop(0.38, `rgba(140,240,195,${(alpha * 0.44).toFixed(3)})`);
+  comaG.addColorStop(1,    'transparent');
+  uiCtx.fillStyle = comaG;
+  uiCtx.beginPath();
+  uiCtx.arc(comet.x, comet.y, comaR, 0, TAU);
+  uiCtx.fill();
+
+  // ── NUCLEUS — bright white core ───────────────────────────────
+  const nucG = uiCtx.createRadialGradient(comet.x, comet.y, 0, comet.x, comet.y, comet.size * 1.5);
+  nucG.addColorStop(0,   `rgba(255,255,255,${alpha.toFixed(3)})`);
+  nucG.addColorStop(0.5, `rgba(200,240,255,${(alpha * 0.6).toFixed(3)})`);
+  nucG.addColorStop(1,   'transparent');
+  uiCtx.fillStyle = nucG;
+  uiCtx.shadowBlur  = 18;
+  uiCtx.shadowColor = 'rgba(200,240,255,0.8)';
+  uiCtx.beginPath();
+  uiCtx.arc(comet.x, comet.y, comet.size * 1.5, 0, TAU);
+  uiCtx.fill();
+
+  uiCtx.restore();
+  comet.x += comet.vx;
+  comet.y += comet.vy;
+  if (comet.life >= comet.maxLife ||
+      comet.x < -300 || comet.x > W + 300 ||
+      comet.y < -300 || comet.y > H + 300) {
+    comet.active = false;
+    comet.trail  = [];
+    cometTimer   = 0;
+  }
+}
+
+// =============================================================
+//  PULSAR (sweeping lighthouse beam on outer rim)
+// =============================================================
+function drawPulsar() {
+  const sf   = FOV * zoom;
+  const zOff = R_GALAXY * 1.55 + sf;
+  const y1   = PULSAR.y * cosX - PULSAR.z * sinX;
+  const z1   = PULSAR.y * sinX + PULSAR.z * cosX;
+  const x2   = PULSAR.x * cosY + z1 * sinY;
+  const z2   = -PULSAR.x * sinY + z1 * cosY;
+  const depth = sf / (zOff + z2);
+  if (depth < 0.02) return;
+  const sx = CX + x2 * depth;
+  const sy = CY + y1 * depth;
+  if (sx < -60 || sx > W + 60 || sy < -60 || sy > H + 60) return;
+
+  pulsarAngle += 0.038 * timeScale;
+  const bLen  = 270 * depth;
+  const bAlpha = 0.28 + 0.24 * Math.abs(Math.sin(simTime * 0.08));
+
+  uiCtx.save();
+  for (const off of [0, Math.PI]) {
+    const bx = sx + Math.cos(pulsarAngle + off) * bLen;
+    const by = sy + Math.sin(pulsarAngle + off) * bLen;
+    const bg = uiCtx.createLinearGradient(sx, sy, bx, by);
+    bg.addColorStop(0,    `rgba(120,232,255,${bAlpha.toFixed(3)})`);
+    bg.addColorStop(0.3,  `rgba(60,170,255,${(bAlpha * 0.45).toFixed(3)})`);
+    bg.addColorStop(1,    'transparent');
+    uiCtx.beginPath();
+    uiCtx.moveTo(sx, sy);
+    uiCtx.lineTo(bx, by);
+    uiCtx.lineWidth   = Math.max(0.5, 2.5 * depth);
+    uiCtx.strokeStyle = bg;
+    uiCtx.shadowBlur  = 14;
+    uiCtx.shadowColor = 'rgba(80,200,255,0.75)';
+    uiCtx.stroke();
+  }
+  // Flashing core dot
+  const cp = 0.4 + 0.6 * Math.abs(Math.sin(simTime * 0.18));
+  const cg = uiCtx.createRadialGradient(sx, sy, 0, sx, sy, 10 * depth);
+  cg.addColorStop(0,   `rgba(255,255,255,${cp.toFixed(3)})`);
+  cg.addColorStop(0.4, `rgba(100,220,255,${(cp * 0.55).toFixed(3)})`);
+  cg.addColorStop(1,   'transparent');
+  uiCtx.fillStyle = cg;
+  uiCtx.shadowBlur  = 20;
+  uiCtx.shadowColor = 'rgba(150,230,255,0.9)';
+  uiCtx.beginPath();
+  uiCtx.arc(sx, sy, 10 * depth, 0, TAU);
+  uiCtx.fill();
+  uiCtx.shadowBlur = 0;
+  uiCtx.restore();
+}
+
+// =============================================================
+//  WORMHOLE PORTAL (clickable Einstein-Rosen bridge)
+// =============================================================
+function drawWormhole() {
+  const sf   = FOV * zoom;
+  const zOff = R_GALAXY * 1.55 + sf;
+  const y1   = WORMHOLE.y * cosX - WORMHOLE.z * sinX;
+  const z1   = WORMHOLE.y * sinX + WORMHOLE.z * cosX;
+  const x2   = WORMHOLE.x * cosY + z1 * sinY;
+  const z2   = -WORMHOLE.x * sinY + z1 * cosY;
+  const depth = sf / (zOff + z2);
+  if (depth < 0.02) return;
+  const sx = CX + x2 * depth;
+  const sy = CY + y1 * depth;
+  const wr  = 68 * depth * zoom;
+  wormAngle    += 0.012 * timeScale;
+  wormScreenPos = { x: sx, y: sy, r: wr };
+
+  uiCtx.save();
+  uiCtx.translate(sx, sy);
+
+  // Dark warped interior
+  const iG = uiCtx.createRadialGradient(0, 0, 0, 0, 0, wr * 0.92);
+  iG.addColorStop(0,    'rgba(0,0,16,0.97)');
+  iG.addColorStop(0.45, 'rgba(14,0,54,0.86)');
+  iG.addColorStop(0.78, 'rgba(65,0,140,0.55)');
+  iG.addColorStop(1,    'transparent');
+  uiCtx.fillStyle = iG;
+  uiCtx.beginPath();
+  uiCtx.ellipse(0, 0, wr, wr * 0.64, 0, 0, TAU);
+  uiCtx.fill();
+
+  // Outer halo glow
+  const hG = uiCtx.createRadialGradient(0, 0, wr * 0.78, 0, 0, wr * 1.65);
+  hG.addColorStop(0, 'rgba(140,60,255,0.22)');
+  hG.addColorStop(1, 'transparent');
+  uiCtx.fillStyle = hG;
+  uiCtx.beginPath();
+  uiCtx.arc(0, 0, wr * 1.65, 0, TAU);
+  uiCtx.fill();
+
+  // Outer spinning arc segments
+  uiCtx.rotate(wormAngle);
+  for (let k = 0; k < 6; k++) {
+    const ang = (k / 6) * TAU;
+    const rA  = 0.42 + 0.30 * Math.sin(simTime * 0.015 + k * 1.1);
+    uiCtx.beginPath();
+    uiCtx.arc(0, 0, wr, ang, ang + TAU / 6 * 0.72);
+    uiCtx.strokeStyle = `rgba(170,80,255,${rA.toFixed(2)})`;
+    uiCtx.lineWidth   = Math.max(1, 3 * depth);
+    uiCtx.shadowBlur  = 14;
+    uiCtx.shadowColor = 'rgba(130,60,255,0.85)';
+    uiCtx.stroke();
+  }
+  // Inner counter-rotating ring
+  uiCtx.rotate(-wormAngle * 2.5);
+  for (let k = 0; k < 4; k++) {
+    const ang = (k / 4) * TAU + 0.4;
+    uiCtx.beginPath();
+    uiCtx.arc(0, 0, wr * 0.68, ang, ang + TAU / 4 * 0.55);
+    uiCtx.strokeStyle = 'rgba(210,148,255,0.55)';
+    uiCtx.lineWidth   = Math.max(0.8, 2 * depth);
+    uiCtx.stroke();
+  }
+  // Central event spark
+  const spA = 0.28 + 0.70 * Math.abs(Math.sin(simTime * 0.06));
+  const spG = uiCtx.createRadialGradient(0, 0, 0, 0, 0, wr * 0.22);
+  spG.addColorStop(0, `rgba(220,180,255,${spA.toFixed(3)})`);
+  spG.addColorStop(1, 'transparent');
+  uiCtx.fillStyle = spG;
+  uiCtx.beginPath();
+  uiCtx.arc(0, 0, wr * 0.22, 0, TAU);
+  uiCtx.fill();
+
+  uiCtx.shadowBlur = 0;
+  uiCtx.restore();
+}
+
+// =============================================================
+//  HYPERSPACE JUMP (H key or click wormhole)
+// =============================================================
+function triggerHyperspace() {
+  if (hyperspaceActive) return;
+  hyperspaceActive = true;
+  hyperspaceLife   = 0;
+}
+
+function drawHyperspace() {
+  if (!hyperspaceActive) return;
+  hyperspaceLife++;
+  const t       = hyperspaceLife / HYPERSPACE_MAX;
+  const stretch = t < 0.5 ? Math.pow(t * 2, 2.2) : Math.pow((1 - t) * 2, 2.2);
+  const sLen    = stretch * 465;
+  const sAlpha  = stretch * 0.88;
+
+  uiCtx.save();
+  const NUM = 220;
+  for (let k = 0; k < NUM; k++) {
+    const ang   = (k / NUM) * TAU + k * 0.41;
+    const start = 28 + (k % 7) * 28;
+    const len   = sLen * (0.38 + (k % 5) * 0.14);
+    const sx0   = CX + Math.cos(ang) * start;
+    const sy0   = CY + Math.sin(ang) * start;
+    const sx1   = CX + Math.cos(ang) * (start + len);
+    const sy1   = CY + Math.sin(ang) * (start + len);
+    const cool  = k % 3 === 0;
+    const sR = cool ? 175 : 255, sG = cool ? 208 : 255, sB = 255;
+    const sGr = uiCtx.createLinearGradient(sx0, sy0, sx1, sy1);
+    sGr.addColorStop(0,   `rgba(${sR},${sG},${sB},${(sAlpha * 0.96).toFixed(3)})`);
+    sGr.addColorStop(0.55,`rgba(${sR},${sG},${sB},${(sAlpha * 0.44).toFixed(3)})`);
+    sGr.addColorStop(1,   `rgba(${sR},${sG},${sB},0)`);
+    uiCtx.beginPath();
+    uiCtx.moveTo(sx0, sy0);
+    uiCtx.lineTo(sx1, sy1);
+    uiCtx.strokeStyle = sGr;
+    uiCtx.lineWidth   = 0.4 + (k % 5) * 0.22;
+    uiCtx.stroke();
+  }
+  // Central blue-white flash at peak
+  if (t > 0.32 && t < 0.68) {
+    const fT = 1 - Math.abs(t - 0.5) / 0.18;
+    const fA = Math.max(0, fT) * 0.72;
+    const fG = uiCtx.createRadialGradient(CX, CY, 0, CX, CY, Math.max(W, H) * 0.62);
+    fG.addColorStop(0,   `rgba(220,235,255,${fA.toFixed(3)})`);
+    fG.addColorStop(0.45,`rgba(155,198,255,${(fA * 0.5).toFixed(3)})`);
+    fG.addColorStop(1,   'transparent');
+    uiCtx.fillStyle = fG;
+    uiCtx.fillRect(0, 0, W, H);
+  }
+  uiCtx.restore();
+  if (hyperspaceLife >= HYPERSPACE_MAX) hyperspaceActive = false;
+}
+
+// =============================================================
+//  TIME DILATION VIGNETTE OVERLAY (T key held)
+// =============================================================
+function drawTimeDilation() {
+  if (timeScale > 0.92) return;
+  const intensity = 1 - timeScale;
+  const vA = intensity * 0.40;
+  uiCtx.save();
+  const vG = uiCtx.createRadialGradient(
+    CX, CY, Math.min(W, H) * 0.24,
+    CX, CY, Math.min(W, H) * 0.78
+  );
+  vG.addColorStop(0, 'transparent');
+  vG.addColorStop(1, `rgba(0,18,80,${vA.toFixed(3)})`);
+  uiCtx.fillStyle = vG;
+  uiCtx.fillRect(0, 0, W, H);
+  // Label
+  uiCtx.font        = 'bold 10px Courier New';
+  uiCtx.fillStyle   = `rgba(80,200,255,${(intensity * 0.85).toFixed(3)})`;
+  uiCtx.textAlign   = 'center';
+  uiCtx.fillText('\u23F1  TIME DILATION ACTIVE', CX, H - 52);
+  uiCtx.restore();
+}
+// =============================================================
+function spawnSupernova() {
+  // Pick a random arm particle as the explosion site
+  const idx = Math.floor(rnd() * N * 0.55);
+  supernovae.push({
+    px: PX[idx], py: PY[idx], pz: PZ[idx],
+    life: 0, maxLife: 100
+  });
+  // Quick white flash overlay
+  flashEl.style.opacity = '1';
+  setTimeout(() => { flashEl.style.opacity = '0'; }, 80);
+}
+
+function drawSupernovae() {
+  for (let k = supernovae.length - 1; k >= 0; k--) {
+    const s  = supernovae[k];
+    s.life++;
+    const t  = s.life / s.maxLife;
+
+    // Project position
+    const y0 = s.py, z0 = s.pz;
+    const y1 = y0 * cosX - z0 * sinX;
+    const z1 = y0 * sinX + z0 * cosX;
+    const x0 = s.px;
+    const x2 = x0 * cosY + z1 * sinY;
+    const z2 = -x0 * sinY + z1 * cosY;
+    const scaledFov = FOV * zoom;
+    const zOff  = R_GALAXY * 1.55 + scaledFov;
+    const depth = scaledFov / (zOff + z2);
+    if (depth < 0.01) { if (s.life >= s.maxLife) supernovae.splice(k, 1); continue; }
+    const sx = CX + x2 * depth;
+    const sy = CY + y1 * depth;
+
+    const alpha      = t < 0.1 ? t / 0.1 : 1 - (t - 0.1) / 0.9;
+    const shockR     = t * 90 * depth * zoom;
+    const coreR      = Math.max(0, (1 - t * 3)) * 8 * depth * zoom;
+    const innerAlpha = alpha * (1 - t);
+
+    // Shockwave ring
+    uiCtx.beginPath();
+    uiCtx.arc(sx, sy, shockR, 0, TAU);
+    uiCtx.strokeStyle = `rgba(255,230,180,${(alpha * 0.55).toFixed(3)})`;
+    uiCtx.lineWidth   = Math.max(0.5, (1 - t) * 3);
+    uiCtx.shadowBlur  = 18;
+    uiCtx.shadowColor = `rgba(255,200,100,${alpha.toFixed(2)})`;
+    uiCtx.stroke();
+    uiCtx.shadowBlur = 0;
+
+    // Bright core
+    if (coreR > 0.5) {
+      const cg = uiCtx.createRadialGradient(sx, sy, 0, sx, sy, coreR);
+      cg.addColorStop(0,   `rgba(255,255,220,${(innerAlpha * 0.9).toFixed(3)})`);
+      cg.addColorStop(0.6, `rgba(255,180,80,${(innerAlpha * 0.5).toFixed(3)})`);
+      cg.addColorStop(1,   'transparent');
+      uiCtx.fillStyle = cg;
+      uiCtx.beginPath();
+      uiCtx.arc(sx, sy, coreR, 0, TAU);
+      uiCtx.fill();
+    }
+
+    if (s.life >= s.maxLife) supernovae.splice(k, 1);
+  }
+}
+
+// =============================================================
+//  RESIZE
+// =============================================================
+function resize() {
+  W  = cvBg.width = cvMain.width = cvGlow.width = cvUI.width = window.innerWidth;
+  H  = cvBg.height = cvMain.height = cvGlow.height = cvUI.height = window.innerHeight;
+  CX = W / 2;
+  CY = H / 2;
+  drawBackground();
+  initShip();
+}
+window.addEventListener('resize', resize);
+
+// =============================================================
+//  MAIN RENDER LOOP
+// =============================================================
+function render(ts) {
+  requestAnimationFrame(render);
+
+  const dt = Math.min(ts - lastTs, 100);
+  lastTs   = ts;
+  fps      = fps * 0.94 + (1000 / (dt || 16.67)) * 0.06;
+  frame++;
+
+  // Time-dilation scale (T hold = 0.08, normal = 1.0)
+  const targetTS = timeDilationActive ? 0.08 : 1.0;
+  timeScale += (targetTS - timeScale) * 0.06;
+  simTime   += timeScale;
+
+  if (!dragging && autoSpin) tRotY += SPIN_SPEED * timeScale;
+  rotX += (tRotX - rotX) * 0.065;
+  rotY += (tRotY - rotY) * 0.065;
+  zoom += (tZoom - zoom) * 0.07;
+
+  cosX = Math.cos(rotX); sinX = Math.sin(rotX);
+  cosY = Math.cos(rotY); sinY = Math.sin(rotY);
+
+  const scaledFov = FOV * zoom;
+  const zOffset   = R_GALAXY * 1.55 + scaledFov;
+  const pulse     = 0.80 + 0.20 * Math.sin(frame * 0.020);
+
+  // Spawn supernova periodically
+  if (frame % 520 === 0) spawnSupernova();
+
+  // ── Trail fade ────────────────────────────────────────────────
+  mainCtx.globalCompositeOperation = 'source-over';
+  mainCtx.fillStyle = 'rgba(0,0,10,0.18)';
+  mainCtx.fillRect(0, 0, W, H);
+
+  glowCtx.globalCompositeOperation = 'source-over';
+  glowCtx.fillStyle = 'rgba(0,0,10,0.20)';
+  glowCtx.fillRect(0, 0, W, H);
+
+  mainCtx.globalCompositeOperation = 'screen';
+  glowCtx.globalCompositeOperation = 'screen';
+
+  // ── Build twinkle lookup (fast O(TWINKLE_N)) ──────────────────
+  // Store boosted radii in a sparse map only for twinkling particles
+  const twMap = new Map();
+  for (let k = 0; k < TWINKLE_N; k++) {
+    const boost = 1.0 + 0.90 * Math.abs(Math.sin(frame * twinkleFreq[k] + twinklePhase[k]));
+    twMap.set(twinkleIdx[k], boost);
+  }
+
+  // ── Draw particles ────────────────────────────────────────────
+  for (let i = 0; i < N; i += renderEvery) {
+    // Rotate X
+    const y1 = PY[i] * cosX - PZ[i] * sinX;
+    const z1 = PY[i] * sinX + PZ[i] * cosX;
+    // Rotate Y
+    const x2 = PX[i] * cosY + z1 * sinY;
+    const z2 = -PX[i] * sinY + z1 * cosY;
+
+    const depth = scaledFov / (zOffset + z2);
+    if (depth < 0.01) continue;
+
+    const sx = CX + x2 * depth;
+    const sy = CY + y1 * depth;
+    if (sx < -22 || sx > W + 22 || sy < -22 || sy > H + 22) continue;
+
+    const boost = twMap.get(i) || 1.0;
+    const alpha = Math.max(0.04, Math.min(1.0, depth * 1.08)) * Math.min(1, boost * 0.75 + 0.25);
+    const size  = Math.max(0.12, PR[i] * depth * zoom * boost);
+
+    const r = PRGB[i*3];
+    const g = PRGB[i*3+1];
+    const b = PRGB[i*3+2];
+
+    mainCtx.beginPath();
+    mainCtx.arc(sx, sy, size, 0, TAU);
+    mainCtx.fillStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+    mainCtx.fill();
+
+    // Glow only for larger / twinkling particles
+    if (size > 0.45 || boost > 1.4) {
+      glowCtx.beginPath();
+      glowCtx.arc(sx, sy, size * 2.4, 0, TAU);
+      glowCtx.fillStyle = `rgba(${r},${g},${b},${(alpha * 0.35).toFixed(3)})`;
+      glowCtx.fill();
+    }
+  }
+
+  drawParallaxStars();
+  drawDwarfGalaxy();
+
+  // ── UI layer ──────────────────────────────────────────────────
+  uiCtx.clearRect(0, 0, W, H);
+
+  drawNebulaClouds();
+  drawJets(pulse);
+  drawBlackHole(pulse);
+  drawLensing(pulse);
+  drawPulsar();
+  drawWormhole();
+  drawSupernovae();
+  drawComet();
+  drawShoots();
+  drawSpaceship();
+  drawHyperspace();
+  drawTimeDilation();
+
+  // Stats
+  if (frame % 20 === 0) {
+    const deg = ((rotY * 180 / Math.PI) % 360 + 360) % 360;
+    statsEl.innerHTML =
+      `FPS &nbsp; ${fps.toFixed(0)}<br>` +
+      `PTC &nbsp; ${(renderEvery === 1 ? N : Math.ceil(N / 2)).toLocaleString()}<br>` +
+      `ROT &nbsp; ${deg.toFixed(1)}&deg;`;
+  }
+}
+
+// =============================================================
+//  POLAR RELATIVISTIC JETS
+// =============================================================
+function drawJets(pulse) {
+  const bhX = CX, bhY = CY;
+  const baseFlicker = 0.72 + 0.28 * Math.sin(frame * 0.11 + 1.3);
+  const jetAlpha    = pulse * baseFlicker;
+  const jetH        = Math.min(H, W) * 0.42;
+
+  for (const dir of [-1, 1]) {
+    const ty  = bhY + dir * jetH;
+    const hx  = bhX + rnd2() * 3;  // slight flicker
+    const mid = jetH * 0.45;
+
+    // Main beam
+    const jg = uiCtx.createLinearGradient(bhX, bhY, bhX, ty);
+    jg.addColorStop(0,   `rgba(220,240,255,${(jetAlpha * 0.85).toFixed(3)})`);
+    jg.addColorStop(0.18,`rgba(140,180,255,${(jetAlpha * 0.55).toFixed(3)})`);
+    jg.addColorStop(0.55,`rgba(80,120,255,${(jetAlpha * 0.22).toFixed(3)})`);
+    jg.addColorStop(1,   'transparent');
+
+    uiCtx.save();
+    uiCtx.beginPath();
+    uiCtx.moveTo(bhX - 4, bhY);
+    uiCtx.quadraticCurveTo(hx, bhY + dir * mid, bhX, ty);
+    uiCtx.lineTo(bhX + 4, bhY);
+    uiCtx.closePath();
+    uiCtx.fillStyle = jg;
+    uiCtx.fill();
+    uiCtx.restore();
+
+    // Bright knot 1/3 up the jet
+    const kx = bhX + rnd2() * 6;
+    const ky = bhY + dir * jetH * 0.32;
+    const kr = 4 + 2 * Math.sin(frame * 0.07 + dir);
+    const kg = uiCtx.createRadialGradient(kx, ky, 0, kx, ky, kr * 3);
+    kg.addColorStop(0,   `rgba(200,220,255,${(jetAlpha * 0.6).toFixed(3)})`);
+    kg.addColorStop(1,   'transparent');
+    uiCtx.fillStyle = kg;
+    uiCtx.beginPath();
+    uiCtx.arc(kx, ky, kr * 3, 0, TAU);
+    uiCtx.fill();
+  }
+}
+
+// =============================================================
+//  BLACK HOLE
+// =============================================================
+function drawBlackHole(pulse) {
+  const bhX = CX, bhY = CY;
+  const bhR = 55 * zoom * pulse;
+  const evR = bhR * 0.22;
+
+  // Wide outer corona
+  const corona = uiCtx.createRadialGradient(bhX, bhY, evR, bhX, bhY, bhR * 2.8);
+  corona.addColorStop(0,    'rgba(180,80,255,0.08)');
+  corona.addColorStop(0.35, 'rgba(0,80,220,0.05)');
+  corona.addColorStop(1,    'transparent');
+  uiCtx.fillStyle = corona;
+  uiCtx.beginPath();
+  uiCtx.arc(bhX, bhY, bhR * 2.8, 0, TAU);
+  uiCtx.fill();
+
+  // Accretion disk — rotates via conic gradient simulation
+  const diskRot  = frame * 0.008;
+  const diskColor = [
+    [255, 220, 80],
+    [255, 140, 30],
+    [200, 60, 20],
+    [140, 20, 80],
+  ];
+  for (let layer = 3; layer >= 0; layer--) {
+    const rInner = bhR * 0.14 + layer * bhR * 0.04;
+    const rOuter = bhR * (0.30 + layer * 0.18);
+    const [dr, dg, db] = diskColor[layer];
+    const alpha  = (0.55 - layer * 0.12) * pulse;
+    const disk   = uiCtx.createRadialGradient(bhX, bhY, rInner, bhX, bhY, rOuter);
+    disk.addColorStop(0,   `rgba(${dr},${dg},${db},${alpha.toFixed(3)})`);
+    disk.addColorStop(0.6, `rgba(${dr},${dg},${db},${(alpha * 0.4).toFixed(3)})`);
+    disk.addColorStop(1,   'transparent');
+    uiCtx.fillStyle = disk;
+    uiCtx.save();
+    uiCtx.translate(bhX, bhY);
+    uiCtx.rotate(diskRot * (1 + layer * 0.4));
+    uiCtx.scale(1, 0.32);  // flatten to disk
+    uiCtx.beginPath();
+    uiCtx.arc(0, 0, rOuter, 0, TAU);
+    uiCtx.fill();
+    uiCtx.restore();
+  }
+
+  // Event horizon
+  uiCtx.beginPath();
+  uiCtx.arc(bhX, bhY, evR, 0, TAU);
+  uiCtx.fillStyle = '#00000e';
+  uiCtx.fill();
+
+  // Photon ring
+  uiCtx.beginPath();
+  uiCtx.arc(bhX, bhY, evR * 1.30, 0, TAU);
+  uiCtx.strokeStyle = `rgba(255,225,130,${(0.55 * pulse).toFixed(3)})`;
+  uiCtx.lineWidth = 0.9;
+  uiCtx.stroke();
+
+  // Chromatic aberration micro-rings
+  for (const [cr, cg, cb, cr2] of [[255,80,80,1.38],[80,80,255,1.46]]) {
+    uiCtx.beginPath();
+    uiCtx.arc(bhX, bhY, evR * cr2, 0, TAU);
+    uiCtx.strokeStyle = `rgba(${cr},${cg},${cb},${(0.18 * pulse).toFixed(3)})`;
+    uiCtx.lineWidth = 0.5;
+    uiCtx.stroke();
+  }
+}
+
+// =============================================================
+//  GRAVITATIONAL LENSING RING
+// =============================================================
+function drawLensing(pulse) {
+  const bhX = CX, bhY = CY;
+  const evR  = 55 * zoom * pulse * 0.22;
+  const base  = evR * 4.2 + Math.sin(frame * 0.019) * evR * 0.15;
+  const nArcs = 4;
+
+  uiCtx.save();
+  uiCtx.translate(bhX, bhY);
+  uiCtx.rotate(frame * 0.006);
+
+  for (let k = 0; k < nArcs; k++) {
+    const start  = (k / nArcs) * TAU;
+    const sweep  = TAU / nArcs * (0.55 + 0.15 * Math.sin(frame * 0.04 + k));
+    const radius = base + Math.sin(frame * 0.03 + k * 1.6) * evR * 0.10;
+    const alpha  = (0.12 + 0.06 * Math.sin(frame * 0.025 + k)) * pulse;
+
+    uiCtx.beginPath();
+    uiCtx.arc(0, 0, radius, start, start + sweep);
+    uiCtx.strokeStyle = `rgba(240,210,130,${alpha.toFixed(3)})`;
+    uiCtx.lineWidth   = 1.0;
+    uiCtx.stroke();
+  }
+
+  // Counter-rotating inner arcs
+  uiCtx.rotate(-frame * 0.014);
+  for (let k = 0; k < 3; k++) {
+    const start  = (k / 3) * TAU + 0.4;
+    const radius = evR * 2.6 + Math.sin(frame * 0.028 + k) * evR * 0.08;
+    const alpha  = (0.09 + 0.04 * Math.sin(frame * 0.035 + k)) * pulse;
+    uiCtx.beginPath();
+    uiCtx.arc(0, 0, radius, start, start + TAU / 3 * 0.6);
+    uiCtx.strokeStyle = `rgba(200,180,255,${alpha.toFixed(3)})`;
+    uiCtx.lineWidth   = 0.7;
+    uiCtx.stroke();
+  }
+  uiCtx.restore();
+}
+
+// =============================================================
+//  INPUT
+// =============================================================
+cvMain.addEventListener('mousedown', e => {
+  dragging = true; autoSpin = false;
+  lastMX = e.clientX; lastMY = e.clientY;
+  mouseDownX = e.clientX; mouseDownY = e.clientY;
+  clearTimeout(idleTimer);
+});
+
+window.addEventListener('mousemove', e => {
+  cursorEl.style.left = e.clientX + 'px';
+  cursorEl.style.top  = e.clientY + 'px';
+  if (!dragging) return;
+  const dx = e.clientX - lastMX;
+  const dy = e.clientY - lastMY;
+  tRotY += dx * 0.0046;
+  tRotX  = Math.max(-Math.PI * 0.48, Math.min(Math.PI * 0.48, tRotX + dy * 0.0046));
+  lastMX = e.clientX; lastMY = e.clientY;
+});
+
+window.addEventListener('mouseup', () => {
+  dragging  = false;
+  idleTimer = setTimeout(() => { autoSpin = true; }, 2800);
+});
+
+cvMain.addEventListener('wheel', e => {
+  e.preventDefault();
+  tZoom = Math.max(0.25, Math.min(3.5, tZoom - e.deltaY * 0.001));
+}, { passive: false });
+
+cvMain.addEventListener('dblclick', () => {
+  tRotX = 0.38; tRotY = 0.0; tZoom = 1.4; autoSpin = true;
+});
+
+let lastTX = 0, lastTY = 0, lastPinchD = 0;
+cvMain.addEventListener('touchstart', e => {
+  dragging = true; autoSpin = false;
+  lastTX = e.touches[0].clientX; lastTY = e.touches[0].clientY;
+  if (e.touches.length === 2) {
+    lastPinchD = Math.hypot(
+      e.touches[1].clientX - e.touches[0].clientX,
+      e.touches[1].clientY - e.touches[0].clientY);
+  }
+  e.preventDefault();
+}, { passive: false });
+
+cvMain.addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    const d = Math.hypot(e.touches[1].clientX - e.touches[0].clientX,
+                         e.touches[1].clientY - e.touches[0].clientY);
+    tZoom = Math.max(0.25, Math.min(3.5, tZoom * (d / lastPinchD)));
+    lastPinchD = d;
+  } else {
+    const dx = e.touches[0].clientX - lastTX;
+    const dy = e.touches[0].clientY - lastTY;
+    tRotY += dx * 0.005;
+    tRotX  = Math.max(-Math.PI * 0.48, Math.min(Math.PI * 0.48, tRotX + dy * 0.005));
+    lastTX = e.touches[0].clientX; lastTY = e.touches[0].clientY;
+  }
+  e.preventDefault();
+}, { passive: false });
+
+cvMain.addEventListener('touchend', () => {
+  dragging  = false;
+  idleTimer = setTimeout(() => { autoSpin = true; }, 2800);
+});
+
+// Wormhole click
+cvMain.addEventListener('click', e => {
+  const moved = Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY);
+  if (moved < 6 && wormScreenPos) {
+    const dx = e.clientX - wormScreenPos.x;
+    const dy = e.clientY - wormScreenPos.y;
+    if (Math.hypot(dx, dy) < wormScreenPos.r * 1.9) triggerHyperspace();
+  }
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') { tRotX = 0.38; tRotY = 0.0; tZoom = 1.4; autoSpin = true; }
+  if (e.key === ' ') { e.preventDefault(); autoSpin = !autoSpin; }
+  if (e.key === 's' || e.key === 'S') spawnSupernova();
+  if (e.key === 'h' || e.key === 'H') triggerHyperspace();
+  if (e.key === 'q' || e.key === 'Q') { renderEvery = renderEvery === 1 ? 2 : 1; }
+  if (e.key === 't' || e.key === 'T') timeDilationActive = true;
+});
+
+window.addEventListener('keyup', e => {
+  if (e.key === 't' || e.key === 'T') timeDilationActive = false;
+});
+
+// =============================================================
+//  SPACESHIP — Sci-fi starship, side-view, moves L→R near bottom
+//  Layout (all coords centred on hull midpoint, x+ = forward):
+//
+//       ┌─[bridge tower]─┐
+//  ═════╪══[ main hull ]══╪═══>  nose
+//       └────────────────┘
+//  [nacelle]          [nacelle]
+// =============================================================
+const ship = {
+  x: -340,
+  y: 0,
+  speed: 0.9,
+  scale: 1.3,
+  trail: [],
+  trailMax: 180,
+  bobPhase: 0,
+};
+
+function initShip() {
+  ship.y = H * 0.80;
+  ship.x = Math.floor(W * 0.15);  // start visible on screen
+}
+
+function drawShipGeometry(ctx, t) {
+  const flicker  = 0.82 + 0.18 * Math.sin(t * 22);
+  const flicker2 = 0.75 + 0.25 * Math.sin(t * 17 + 1.2);
+  ctx.save();
+
+  // ── Ground shadow ────────────────────────────────────────────
+  const sh = ctx.createRadialGradient(0, 42, 5, 0, 48, 110);
+  sh.addColorStop(0, 'rgba(0,0,0,0.38)');
+  sh.addColorStop(1, 'transparent');
+  ctx.fillStyle = sh;
+  ctx.beginPath();
+  ctx.ellipse(0, 48, 130, 28, 0, 0, TAU);
+  ctx.fill();
+
+  // ══════════════════════════════════════════════════
+  //  ENGINE NACELLES — drawn first (behind hull)
+  // ══════════════════════════════════════════════════
+  const nacDefs = [
+    { cx: -55, cy: 32,  rx: 72, ry: 11 },
+    { cx: -55, cy: -32, rx: 72, ry: 11 },
+  ];
+  nacDefs.forEach((n, ni) => {
+    ctx.save();
+    ctx.translate(n.cx, n.cy);
+
+    // Nacelle cylinder body — top face
+    const ng = ctx.createLinearGradient(0, -n.ry, 0, n.ry);
+    ng.addColorStop(0,   '#c8ddf0');
+    ng.addColorStop(0.35,'#8aaac8');
+    ng.addColorStop(0.7, '#506888');
+    ng.addColorStop(1,   '#304058');
+    ctx.beginPath();
+    ctx.ellipse(0, 0, n.rx, n.ry, 0, 0, TAU);
+    ctx.fillStyle = ng;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60,90,130,0.50)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Panel rib lines on nacelle
+    ctx.strokeStyle = 'rgba(40,60,90,0.40)';
+    ctx.lineWidth = 0.6;
+    for (const rx of [-30, -5, 20, 45]) {
+      ctx.beginPath();
+      ctx.moveTo(rx, -n.ry * 0.9);
+      ctx.lineTo(rx,  n.ry * 0.9);
+      ctx.stroke();
+    }
+
+    // Rear nozzle cap (dark ring)
+    ctx.beginPath();
+    ctx.ellipse(-n.rx + 4, 0, 5, n.ry * 0.85, 0, 0, TAU);
+    ctx.fillStyle = '#0a1220';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60,120,220,0.70)';
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+
+    // Engine exhaust cone
+    const eL = 55 + 18 * flicker;
+    const eg  = ctx.createLinearGradient(-n.rx, 0, -n.rx - eL, 0);
+    eg.addColorStop(0,   `rgba(100,200,255,${(0.95*flicker).toFixed(2)})`);
+    eg.addColorStop(0.15,`rgba(60,140,255,${(0.70*flicker).toFixed(2)})`);
+    eg.addColorStop(0.5, `rgba(20,60,200,${(0.30*flicker).toFixed(2)})`);
+    eg.addColorStop(1,   'transparent');
+    ctx.beginPath();
+    ctx.moveTo(-n.rx + 2,  n.ry * 0.8);
+    ctx.lineTo(-n.rx - eL, 0);
+    ctx.lineTo(-n.rx + 2, -n.ry * 0.8);
+    ctx.closePath();
+    ctx.fillStyle = eg;
+    ctx.fill();
+
+    // Hot inner glow at nozzle
+    const hg = ctx.createRadialGradient(-n.rx, 0, 0, -n.rx, 0, n.ry);
+    hg.addColorStop(0,   `rgba(200,235,255,${flicker.toFixed(2)})`);
+    hg.addColorStop(0.5, `rgba(60,150,255,${(0.65*flicker).toFixed(2)})`);
+    hg.addColorStop(1,   'transparent');
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.arc(-n.rx, 0, n.ry, 0, TAU);
+    ctx.fill();
+
+    // Forward intake ring
+    ctx.beginPath();
+    ctx.ellipse(n.rx - 4, 0, 5, n.ry * 0.85, 0, 0, TAU);
+    ctx.fillStyle = '#0d1828';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80,130,180,0.50)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Nav blink light at nacelle tip
+    const blink = 0.4 + 0.6 * Math.abs(Math.sin(frame * 0.07 + ni * 1.8));
+    const nlC   = ni === 0 ? '255,80,80' : '80,255,120';
+    const nlG   = ctx.createRadialGradient(n.rx - 2, 0, 0, n.rx - 2, 0, 10);
+    nlG.addColorStop(0,   `rgba(${nlC},${(0.9*blink).toFixed(2)})`);
+    nlG.addColorStop(1,   'transparent');
+    ctx.fillStyle = nlG;
+    ctx.beginPath();
+    ctx.arc(n.rx - 2, 0, 10, 0, TAU);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Pylon connecting nacelle to hull
+    ctx.save();
+    const pylonSign = ni === 0 ? 1 : -1;
+    ctx.beginPath();
+    ctx.moveTo(-20,  pylonSign * 16);
+    ctx.lineTo(-20,  n.cy);
+    ctx.lineTo(-80,  n.cy);
+    ctx.lineTo(-80,  pylonSign * 16);
+    ctx.closePath();
+    const pylG = ctx.createLinearGradient(0, pylonSign * 16, 0, n.cy);
+    pylG.addColorStop(0,   '#7090b0');
+    pylG.addColorStop(1,   '#445870');
+    ctx.fillStyle = pylG;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(50,80,120,0.40)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // ══════════════════════════════════════════════════
+  //  MAIN HULL — slab fuselage
+  // ══════════════════════════════════════════════════
+
+  // Hull bottom face (perspective underside)
+  ctx.beginPath();
+  ctx.moveTo( 120,  18);
+  ctx.lineTo(-100,  18);
+  ctx.lineTo(-120,  12);
+  ctx.lineTo( 100,  12);
+  ctx.closePath();
+  ctx.fillStyle = '#3a4e60';
+  ctx.fill();
+
+  // Hull top face
+  const topG = ctx.createLinearGradient(0, -22, 0, 16);
+  topG.addColorStop(0,   '#e2eff8');
+  topG.addColorStop(0.25,'#b8d0e8');
+  topG.addColorStop(0.6, '#7898b8');
+  topG.addColorStop(1,   '#4a6280');
+  ctx.beginPath();
+  ctx.roundRect(-120, -22, 240, 40, [4, 20, 4, 4]);
+  ctx.fillStyle = topG;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(60,90,130,0.45)';
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+
+  // Hull panel engraving
+  ctx.save();
+  ctx.strokeStyle = 'rgba(30,55,90,0.38)';
+  ctx.lineWidth = 0.7;
+  // Longitudinal seam lines
+  for (const ly of [-8, 0, 8]) {
+    ctx.beginPath();
+    ctx.moveTo(-115, ly);
+    ctx.lineTo( 115, ly);
+    ctx.stroke();
+  }
+  // Transverse section lines
+  for (const lx of [-80, -50, -20, 15, 50, 80]) {
+    ctx.beginPath();
+    ctx.moveTo(lx, -20);
+    ctx.lineTo(lx,  16);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Armour/detail tiles (raised panel illusion)
+  const tiles = [
+    [-100,-18, 35, 14], [-60,-18, 30, 14], [-25,-18, 32, 14],
+    [ 12, -18, 30, 14], [ 47, -18, 32, 14],
+    [-80,   2, 28, 12], [-45,   2, 28, 12], [-10,   2, 28, 12], [24, 2, 28, 12],
+  ];
+  tiles.forEach(([tx, ty, tw, th]) => {
+    const tileG = ctx.createLinearGradient(tx, ty, tx, ty + th);
+    tileG.addColorStop(0,   'rgba(255,255,255,0.06)');
+    tileG.addColorStop(1,   'rgba(0,0,0,0.06)');
+    ctx.beginPath();
+    ctx.roundRect(tx + 1, ty + 1, tw - 2, th - 2, 1);
+    ctx.fillStyle = tileG;
+    ctx.fill();
+  });
+
+  // ══════════════════════════════════════════════════
+  //  BRIDGE TOWER — sits on top of hull centre
+  // ══════════════════════════════════════════════════
+  ctx.save();
+  ctx.translate(20, 0);
+
+  // Tower body
+  const twG = ctx.createLinearGradient(0, -52, 0, -22);
+  twG.addColorStop(0,   '#d8eaf8');
+  twG.addColorStop(0.5, '#8aaac8');
+  twG.addColorStop(1,   '#5878a0');
+  ctx.beginPath();
+  ctx.roundRect(-22, -52, 44, 30, [5, 5, 0, 0]);
+  ctx.fillStyle = twG;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(60,100,150,0.50)';
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+
+  // Tower viewport windows (3 glowing slits)
+  for (let w = 0; w < 3; w++) {
+    const wx   = -12 + w * 12;
+    const wG   = ctx.createRadialGradient(wx, -42, 0, wx, -42, 5);
+    wG.addColorStop(0,   'rgba(160,230,255,0.95)');
+    wG.addColorStop(0.5, 'rgba(60,160,255,0.60)');
+    wG.addColorStop(1,   'transparent');
+    ctx.fillStyle = wG;
+    ctx.beginPath();
+    ctx.ellipse(wx, -42, 4, 5, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(wx, -42, 4, 5, 0, 0, TAU);
+    ctx.strokeStyle = 'rgba(100,190,255,0.55)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  // Tower panel line
+  ctx.beginPath();
+  ctx.moveTo(-21, -38);
+  ctx.lineTo( 21, -38);
+  ctx.strokeStyle = 'rgba(40,70,110,0.35)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+
+  // Sensor dish on top of tower
+  ctx.save();
+  ctx.translate(0, -52);
+  ctx.beginPath();
+  ctx.arc(0, 0, 10, Math.PI, 0);   // half dome
+  const dishG = ctx.createLinearGradient(-10, 0, 10, -10);
+  dishG.addColorStop(0,   '#b0c8e0');
+  dishG.addColorStop(1,   '#e8f4ff');
+  ctx.fillStyle = dishG;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(80,130,180,0.50)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+  // Dish rotating scanner blink
+  const scanA = frame * 0.04;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(Math.cos(scanA) * 8, Math.sin(scanA) * -6);
+  ctx.strokeStyle = `rgba(0,220,255,${(0.6 * flicker2).toFixed(2)})`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.restore(); // end bridge tower
+
+  // ══════════════════════════════════════════════════
+  //  NOSE — forward section (tapered bow)
+  // ══════════════════════════════════════════════════
+  const noseFG = ctx.createLinearGradient(100, -18, 140, 0);
+  noseFG.addColorStop(0,   '#eef6ff');
+  noseFG.addColorStop(0.5, '#b0cce0');
+  noseFG.addColorStop(1,   '#6888a8');
+  ctx.beginPath();
+  ctx.moveTo(120, -22);
+  ctx.lineTo(120,  18);
+  ctx.lineTo(148,   0);
+  ctx.closePath();
+  ctx.fillStyle = noseFG;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(80,120,160,0.40)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Nose glow stripe (energy weapon port / deflector)
+  const ng2 = ctx.createRadialGradient(140, 0, 0, 140, 0, 14);
+  ng2.addColorStop(0,   `rgba(80,200,255,${(0.55 * flicker2).toFixed(2)})`);
+  ng2.addColorStop(1,   'transparent');
+  ctx.fillStyle = ng2;
+  ctx.beginPath();
+  ctx.arc(140, 0, 14, 0, TAU);
+  ctx.fill();
+
+  // ══════════════════════════════════════════════════
+  //  STERN / MAIN ENGINES (large, rear face)
+  // ══════════════════════════════════════════════════
+  const sternEngines = [
+    { y: -10, ry: 7 },
+    { y:   0, ry: 9 },   // central (biggest)
+    { y:  10, ry: 7 },
+  ];
+  sternEngines.forEach((e, ei) => {
+    ctx.save();
+    ctx.translate(-120, e.y);
+
+    // Nozzle ring
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 4, e.ry, 0, 0, TAU);
+    ctx.fillStyle = '#08101c';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80,140,220,0.70)';
+    ctx.lineWidth = 1.0;
+    ctx.stroke();
+
+    // Exhaust plume
+    const pL = (ei === 1 ? 80 : 60) + 20 * flicker;
+    const pg  = ctx.createLinearGradient(0, 0, -pL, 0);
+    pg.addColorStop(0,   `rgba(140,210,255,${(0.95*flicker).toFixed(2)})`);
+    pg.addColorStop(0.1, `rgba(80,160,255,${(0.75*flicker).toFixed(2)})`);
+    pg.addColorStop(0.4, `rgba(30,80,220,${(0.35*flicker).toFixed(2)})`);
+    pg.addColorStop(1,   'transparent');
+    ctx.beginPath();
+    ctx.moveTo(0,   e.ry * 0.85);
+    ctx.lineTo(-pL, 0);
+    ctx.lineTo(0,  -e.ry * 0.85);
+    ctx.closePath();
+    ctx.fillStyle = pg;
+    ctx.fill();
+
+    // Core hot dot
+    const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, e.ry);
+    cg.addColorStop(0,   `rgba(230,245,255,${flicker.toFixed(2)})`);
+    cg.addColorStop(0.6, `rgba(80,170,255,${(0.6*flicker).toFixed(2)})`);
+    cg.addColorStop(1,   'transparent');
+    ctx.fillStyle = cg;
+    ctx.beginPath();
+    ctx.arc(0, 0, e.ry, 0, TAU);
+    ctx.fill();
+
+    ctx.restore();
+  });
+
+  // ══════════════════════════════════════════════════
+  //  HULL SPECULAR TOP EDGE HIGHLIGHT
+  // ══════════════════════════════════════════════════
+  ctx.beginPath();
+  ctx.moveTo( 148,   0);
+  ctx.lineTo( 120, -22);
+  ctx.lineTo(-120, -22);
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // ══════════════════════════════════════════════════
+  //  HULL RUNNING LIGHTS (amber rows along hull side)
+  // ══════════════════════════════════════════════════
+  ctx.save();
+  const runBlink = 0.5 + 0.5 * Math.sin(frame * 0.12);
+  for (let li = 0; li < 6; li++) {
+    const lx = -90 + li * 36;
+    const lg = ctx.createRadialGradient(lx, 16, 0, lx, 16, 6);
+    lg.addColorStop(0,   `rgba(255,200,60,${(0.85 * runBlink).toFixed(2)})`);
+    lg.addColorStop(1,   'transparent');
+    ctx.fillStyle = lg;
+    ctx.beginPath();
+    ctx.arc(lx, 16, 6, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.restore(); // end entire ship
+}
+
+/* Persistent exhaust trail */
+function drawShipTrail() {
+  if (ship.trail.length < 2) return;
+  uiCtx.save();
+  const trails = [
+    { dy: -32 * ship.scale, color: '60,140,255' },
+    { dy:   0,              color: '80,170,255' },
+    { dy:  32 * ship.scale, color: '60,140,255' },
+  ];
+  trails.forEach(tr => {
+    for (let k = 1; k < ship.trail.length; k++) {
+      const a = ship.trail[k];
+      const b = ship.trail[k - 1];
+      const t = k / ship.trail.length;
+      uiCtx.beginPath();
+      uiCtx.moveTo(a.x, a.y + tr.dy);
+      uiCtx.lineTo(b.x, b.y + tr.dy);
+      uiCtx.strokeStyle = `rgba(${tr.color},${(t * 0.40).toFixed(3)})`;
+      uiCtx.lineWidth   = t * (tr.dy === 0 ? 5 : 3);
+      uiCtx.stroke();
+    }
+  });
+  uiCtx.restore();
+}
+
+function drawSpaceship() {
+  ship.bobPhase += 0.015;
+  const bob   = Math.sin(ship.bobPhase) * 6;
+  const baseY = H * 0.80;
+
+  ship.x += ship.speed;
+  if (ship.x > W + 380) {
+    ship.x = -380;
+    ship.trail.length = 0;
+  }
+
+  const sx = ship.x;
+  const sy = baseY + bob;
+
+  ship.trail.push({ x: sx - 120 * ship.scale, y: sy });
+  if (ship.trail.length > ship.trailMax) ship.trail.shift();
+
+  drawShipTrail();
+
+  uiCtx.save();
+  uiCtx.translate(sx, sy);
+  uiCtx.scale(ship.scale, ship.scale);
+  drawShipGeometry(uiCtx, frame * 0.045);
+  uiCtx.restore();
+}
+
+// =============================================================
+//  BOOTSTRAP
+// =============================================================
+
+/* Draw the entire spaceship centred at (0,0), pointing right.
+   Scale 1 = ~240 px wide. We apply ctx.translate/scale outside. */
+function drawShipGeometry(ctx, t) {
+  // t = 0..1 engine flicker
+  const flicker = 0.80 + 0.20 * Math.sin(t * 18.4);
+
+  ctx.save();
+
+  /* ── Shadow / depth haze beneath hull ── */
+  const shadowG = ctx.createRadialGradient(0, 22, 4, 0, 22, 80);
+  shadowG.addColorStop(0,   'rgba(0,0,0,0.32)');
+  shadowG.addColorStop(1,   'transparent');
+  ctx.fillStyle = shadowG;
+  ctx.beginPath();
+  ctx.ellipse(0, 22, 80, 22, 0, 0, TAU);
+  ctx.fill();
+
+  /* ── Main hull — flat delta-wing body ── */
+  // Bottom belly (lighter, catching ambient light)
+  const bellyG = ctx.createLinearGradient(0, 14, 0, -10);
+  bellyG.addColorStop(0,   '#7a8fa8');
+  bellyG.addColorStop(0.5, '#9fb5cc');
+  bellyG.addColorStop(1,   '#b8d0e8');
+  ctx.beginPath();
+  ctx.moveTo( 110,  0);   // nose
+  ctx.lineTo( -90,  14);  // rear left belly
+  ctx.lineTo( -90, -4);   // rear right top edge
+  ctx.closePath();
+  ctx.fillStyle = bellyG;
+  ctx.fill();
+
+  // Top dorsal surface (darker, top-lit with edge highlight)
+  const dorsalG = ctx.createLinearGradient(0, -18, 0, 4);
+  dorsalG.addColorStop(0,   '#ddeeff');
+  dorsalG.addColorStop(0.3, '#a8c0d8');
+  dorsalG.addColorStop(1,   '#6080a0');
+  ctx.beginPath();
+  ctx.moveTo( 110,  0);   // nose
+  ctx.lineTo(  60, -18);  // dorsal ridge peak
+  ctx.lineTo( -90, -14);  // rear top left
+  ctx.lineTo( -90,  -4);  // rear right top edge
+  ctx.closePath();
+  ctx.fillStyle = dorsalG;
+  ctx.fill();
+
+  // Hull panel lines — subtle engraving
+  ctx.save();
+  ctx.strokeStyle = 'rgba(60,80,110,0.45)';
+  ctx.lineWidth   = 0.6;
+  // Longitudinal panel line
+  ctx.beginPath();
+  ctx.moveTo(100,  0);
+  ctx.lineTo(-85,  6);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(80, -10);
+  ctx.lineTo(-85, -8);
+  ctx.stroke();
+  // Transverse rib lines
+  for (const rx of [-20, -50, -75]) {
+    const frac = (rx + 90) / 200;
+    ctx.beginPath();
+    ctx.moveTo(rx, -14 * frac + 4);
+    ctx.lineTo(rx,  14 * frac);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  /* ── Port & starboard wing extensions ── */
+  // Port (upper) wing
+  const wingG = ctx.createLinearGradient(0, -40, 0, -14);
+  wingG.addColorStop(0, '#c8dff0');
+  wingG.addColorStop(1, '#6888aa');
+  ctx.beginPath();
+  ctx.moveTo( 20, -14);
+  ctx.lineTo(-60, -14);
+  ctx.lineTo(-95, -50);
+  ctx.lineTo(-40, -30);
+  ctx.closePath();
+  ctx.fillStyle = wingG;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(80,110,150,0.4)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+
+  // Starboard (lower) wing
+  const wingG2 = ctx.createLinearGradient(0, 14, 0, 50);
+  wingG2.addColorStop(0, '#8aa8c8');
+  wingG2.addColorStop(1, '#4a6888');
+  ctx.beginPath();
+  ctx.moveTo( 20,  14);
+  ctx.lineTo(-60,  14);
+  ctx.lineTo(-95,  50);
+  ctx.lineTo(-40,  28);
+  ctx.closePath();
+  ctx.fillStyle = wingG2;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(50,80,120,0.4)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+
+  /* ── Nose cone ── */
+  const noseG = ctx.createLinearGradient(85, -8, 110, 4);
+  noseG.addColorStop(0,   '#e8f4ff');
+  noseG.addColorStop(0.6, '#b0c8e0');
+  noseG.addColorStop(1,   '#7090b0');
+  ctx.beginPath();
+  ctx.moveTo(110,  0);
+  ctx.lineTo( 85, -8);
+  ctx.lineTo( 75,  0);
+  ctx.lineTo( 85,  8);
+  ctx.closePath();
+  ctx.fillStyle = noseG;
+  ctx.fill();
+
+  /* ── Cockpit canopy ── */
+  ctx.save();
+  ctx.translate(52, -9);
+  const canopyG = ctx.createRadialGradient(-4, -5, 1, 0, 0, 16);
+  canopyG.addColorStop(0,   'rgba(180,230,255,0.95)');
+  canopyG.addColorStop(0.4, 'rgba(80,160,220,0.75)');
+  canopyG.addColorStop(1,   'rgba(20,60,120,0.60)');
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 16, 9, -0.2, 0, TAU);
+  ctx.fillStyle = canopyG;
+  ctx.fill();
+  // Canopy specular glint
+  ctx.beginPath();
+  ctx.ellipse(-4, -3, 6, 3, -0.3, 0, TAU);
+  ctx.fillStyle = 'rgba(255,255,255,0.50)';
+  ctx.fill();
+  // Frame ring
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 16, 9, -0.2, 0, TAU);
+  ctx.strokeStyle = 'rgba(100,160,220,0.55)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.restore();
+
+  /* ── Engine nacelles (2) ── */
+  const nacelles = [{ y: -8, ry: 4 }, { y: 8, ry: 4 }];
+  nacelles.forEach(n => {
+    ctx.save();
+    ctx.translate(-90, n.y);
+
+    // Nacelle body
+    const nacG = ctx.createLinearGradient(0, -n.ry, 0, n.ry);
+    nacG.addColorStop(0,   '#b0c8e0');
+    nacG.addColorStop(0.5, '#7090b0');
+    nacG.addColorStop(1,   '#405870');
+    ctx.beginPath();
+    ctx.ellipse(-2, 0, 12, n.ry, 0, 0, TAU);
+    ctx.fillStyle = nacG;
+    ctx.fill();
+
+    // Engine nozzle ring
+    ctx.beginPath();
+    ctx.ellipse(-13, 0, 2, n.ry * 0.8, 0, 0, TAU);
+    ctx.fillStyle = '#1a2535';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80,120,180,0.6)';
+    ctx.lineWidth   = 0.8;
+    ctx.stroke();
+
+    // Engine glow cone (exhaust)
+    const eLen   = 36 + 10 * flicker;
+    const eGlow  = ctx.createLinearGradient(-13, 0, -13 - eLen, 0);
+    eGlow.addColorStop(0,   `rgba(80,180,255,${(0.90 * flicker).toFixed(2)})`);
+    eGlow.addColorStop(0.2, `rgba(40,120,255,${(0.65 * flicker).toFixed(2)})`);
+    eGlow.addColorStop(0.6, `rgba(0,60,200,${(0.25 * flicker).toFixed(2)})`);
+    eGlow.addColorStop(1,   'transparent');
+    ctx.beginPath();
+    ctx.moveTo(-13,  n.ry * 0.7);
+    ctx.lineTo(-13 - eLen, 0);
+    ctx.lineTo(-13, -n.ry * 0.7);
+    ctx.closePath();
+    ctx.fillStyle = eGlow;
+    ctx.fill();
+
+    // Nozzle inner hot ring
+    const hotG = ctx.createRadialGradient(-13, 0, 0, -13, 0, n.ry * 0.9);
+    hotG.addColorStop(0,   `rgba(220,240,255,${flicker.toFixed(2)})`);
+    hotG.addColorStop(0.5, `rgba(80,160,255,${(0.7*flicker).toFixed(2)})`);
+    hotG.addColorStop(1,   'transparent');
+    ctx.fillStyle = hotG;
+    ctx.beginPath();
+    ctx.ellipse(-13, 0, n.ry * 0.9, n.ry * 0.9, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.restore();
+  });
+
+  /* ── Wing-tip nav lights ── */
+  const navLights = [
+    { x: -92, y: -50, c: '255,80,80'   },   // port red
+    { x: -92, y:  50, c: '80,255,120'  },   // starboard green
+  ];
+  navLights.forEach(nl => {
+    const blink = 0.5 + 0.5 * Math.sin(frame * 0.08 + nl.y);
+    const nlG   = ctx.createRadialGradient(nl.x, nl.y, 0, nl.x, nl.y, 7);
+    nlG.addColorStop(0,   `rgba(${nl.c},${(0.95 * blink).toFixed(2)})`);
+    nlG.addColorStop(1,   'transparent');
+    ctx.fillStyle = nlG;
+    ctx.beginPath();
+    ctx.arc(nl.x, nl.y, 7, 0, TAU);
+    ctx.fill();
+  });
+
+  /* ── Hull specular edge highlight ── */
+  ctx.beginPath();
+  ctx.moveTo(108,  0);
+  ctx.lineTo( 58, -18);
+  ctx.lineTo(-88, -14);
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth   = 1.2;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/* Draw persistent engine trail */
+function drawShipTrail() {
+  if (ship.trail.length < 2) return;
+  uiCtx.save();
+  for (let k = 1; k < ship.trail.length; k++) {
+    const a  = ship.trail[k];
+    const b  = ship.trail[k - 1];
+    const t  = k / ship.trail.length;
+    const aw = t * 3.5;
+    uiCtx.beginPath();
+    uiCtx.moveTo(a.x, a.y - 8 * ship.scale);
+    uiCtx.lineTo(b.x, b.y - 8 * ship.scale);
+    uiCtx.strokeStyle = `rgba(60,140,255,${(t * 0.35).toFixed(3)})`;
+    uiCtx.lineWidth   = aw;
+    uiCtx.stroke();
+
+    uiCtx.beginPath();
+    uiCtx.moveTo(a.x, a.y + 8 * ship.scale);
+    uiCtx.lineTo(b.x, b.y + 8 * ship.scale);
+    uiCtx.strokeStyle = `rgba(60,140,255,${(t * 0.35).toFixed(3)})`;
+    uiCtx.lineWidth   = aw;
+    uiCtx.stroke();
+  }
+  uiCtx.restore();
+}
+
+function drawSpaceship() {
+  ship.bobPhase += 0.018;
+  const bob  = Math.sin(ship.bobPhase) * 5;
+  const baseY = H * 0.82;
+
+  // Move left to right, wrap around
+  ship.x += ship.speed;
+  if (ship.x > W + 300) {
+    ship.x = -280;
+    ship.trail.length = 0;
+  }
+
+  const sx = ship.x;
+  const sy = baseY + bob;
+
+  // Record trail from the two engine nacelle exits
+  ship.trail.push({ x: sx - 90 * ship.scale, y: sy });
+  if (ship.trail.length > ship.trailMax) ship.trail.shift();
+
+  drawShipTrail();
+
+  // Draw ship
+  uiCtx.save();
+  uiCtx.translate(sx, sy);
+  uiCtx.scale(ship.scale, ship.scale);
+  drawShipGeometry(uiCtx, frame * 0.05);
+  uiCtx.restore();
+}
+
+// =============================================================
+//  BOOTSTRAP
+// =============================================================
+resize();
+generateGalaxy();
+generateParallaxStars();
+generateDwarfGalaxy();
+spawnComet();
+for (let i = 0; i < 3; i++) shoots.push(spawnShoot());
+requestAnimationFrame(render);
+
+// Controls panel — always visible, no auto-hide
+const introEl = document.getElementById('intro');
+</script>
+</body>
+</html>
