@@ -241,6 +241,41 @@
       background: radial-gradient(ellipse at center,
         transparent 48%, rgba(0,0,8,0.62) 100%);
     }
+
+    /* ── Record button ───────────────────────────────────────── */
+    #rec-btn {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      padding: 10px 24px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #00f0ff;
+      background: rgba(0, 5, 20, 0.88);
+      border: 1px solid rgba(0, 220, 255, 0.40);
+      border-radius: 6px;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 0 18px rgba(0, 200, 255, 0.18);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    #rec-btn:hover { background: rgba(0, 220, 255, 0.12); }
+    #rec-btn.recording {
+      color: #ff4060;
+      border-color: rgba(255, 60, 80, 0.60);
+      box-shadow: 0 0 18px rgba(255, 60, 80, 0.28);
+      animation: rec-pulse 1s ease-in-out infinite;
+    }
+    @keyframes rec-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.55; }
+    }
   </style>
 </head>
 <body>
@@ -335,6 +370,8 @@
     <strong>@Jasmine Nguyen</strong>
   </div>
 
+  <button id="rec-btn">⏺ Record 10s</button>
+
 <script>
 'use strict';
 /* =============================================================
@@ -365,6 +402,11 @@ const uiCtx   = cvUI.getContext('2d');
 
 const statsEl  = document.getElementById('stats');
 const cursorEl = document.getElementById('cursor');
+
+// ── Composite canvas for video recording ──────────────────────
+const cvComp = document.createElement('canvas');
+const compCtx = cvComp.getContext('2d');
+let isRecording = false;
 
 let W, H, CX, CY;
 
@@ -1249,6 +1291,8 @@ function drawSupernovae() {
 function resize() {
   W  = cvBg.width = cvMain.width = cvGlow.width = cvUI.width = window.innerWidth;
   H  = cvBg.height = cvMain.height = cvGlow.height = cvUI.height = window.innerHeight;
+  cvComp.width  = W;
+  cvComp.height = H;
   CX = W / 2;
   CY = H / 2;
   drawBackground();
@@ -1371,6 +1415,23 @@ function render(ts) {
       `FPS &nbsp; ${fps.toFixed(0)}<br>` +
       `PTC &nbsp; ${(renderEvery === 1 ? N : Math.ceil(N / 2)).toLocaleString()}<br>` +
       `ROT &nbsp; ${deg.toFixed(1)}&deg;`;
+  }
+
+  // ── Composite all layers for recording ────────────────────────
+  if (isRecording) {
+    compCtx.fillStyle = '#00000a';
+    compCtx.fillRect(0, 0, W, H);
+    compCtx.globalCompositeOperation = 'source-over';
+    compCtx.globalAlpha = 1;
+    compCtx.filter = 'none';
+    compCtx.drawImage(cvBg, 0, 0);
+    compCtx.drawImage(cvMain, 0, 0);
+    compCtx.globalAlpha = 0.50;
+    compCtx.filter = 'blur(5px)';
+    compCtx.drawImage(cvGlow, 0, 0);
+    compCtx.globalAlpha = 1;
+    compCtx.filter = 'none';
+    compCtx.drawImage(cvUI, 0, 0);
   }
 }
 
@@ -2353,6 +2414,47 @@ requestAnimationFrame(render);
 
 // Controls panel — always visible, no auto-hide
 const introEl = document.getElementById('intro');
+
+// =============================================================
+//  10-SECOND VIDEO RECORDER
+// =============================================================
+(function () {
+  const btn = document.getElementById('rec-btn');
+  const DURATION = 10000; // ms
+
+  btn.addEventListener('click', () => {
+    if (isRecording) return;
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : 'video/webm';
+
+    const stream   = cvComp.captureStream(60);
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+    const chunks   = [];
+
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+      isRecording = false;
+      btn.textContent = '⏺ Record 10s';
+      btn.classList.remove('recording');
+
+      const blob = new Blob(chunks, { type: mimeType });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'genesis-galaxy.webm';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    };
+
+    isRecording = true;
+    btn.textContent = '⏹ Recording…';
+    btn.classList.add('recording');
+    recorder.start();
+    setTimeout(() => recorder.stop(), DURATION);
+  });
+}());
 </script>
 </body>
 </html>
